@@ -1,0 +1,6 @@
+growwapi
+pyotp
+python-dotenv
+pandas
+pyyaml
+pytest
