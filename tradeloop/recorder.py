@@ -1,6 +1,7 @@
 """Tick recorder: index values, option LTPs and top-of-book for the nearest weekly expiry.
 
-Run once per trading day (cron at ~9:05 IST). It logs in, subscribes to the
+Run every weekday (cron at ~9:05 IST); on holidays it exits at once. It logs in,
+checks Groww's listed expiries against the market calendar, subscribes to the
 indices, and on the first index value picks strikes around ATM. The feed
 publishes Ticks on the bus; TickWriter stores them. Strikes are re-centred if
 spot drifts far. Exits at the configured end time.
@@ -28,7 +29,8 @@ import yaml
 from tradeloop.core.bus import Bus, Topic
 from tradeloop.core.ids import InstrumentId
 from tradeloop.core.interfaces import MarketData
-from tradeloop.core.types import Tick
+from tradeloop.core.market_calendar import MarketCalendar, UnknownYear
+from tradeloop.core.types import Contract, Tick
 from tradeloop.instruments import pick_options
 from tradeloop.store import Store, TickWriter
 
@@ -120,6 +122,20 @@ def seconds_until(end: str) -> float:
     return max(0.0, (end_dt - now).total_seconds())
 
 
+def calendar_problems(cal: MarketCalendar, contracts: list[Contract], underlyings: list[dict]) -> list[str]:
+    """Broker-listed expiries the calendar disagrees with (usually a wrong holiday list)."""
+    problems = []
+    for u in underlyings:
+        index = InstrumentId.index(u["exchange"], u["name"])
+        listed = {c.instrument.expiry for c in contracts
+                  if c.instrument.exchange == u["exchange"] and c.instrument.underlying == u["name"]}
+        try:
+            problems += cal.check_expiries(index, listed)
+        except UnknownYear as e:
+            problems.append(str(e))
+    return problems
+
+
 def build(cfg: dict, api, today: date, **adapter_kw):
     """Wire the Groww adapter, store and recorder. Tests pass fakes via adapter_kw."""
     from tradeloop.brokers.groww import GrowwMarketData
@@ -145,7 +161,18 @@ def main():
         log.error("Not starting: %s", problem)
         sys.exit(1)
 
-    rec, md = build(cfg, login(), datetime.now(IST).date())
+    cal = MarketCalendar.load()
+    today = datetime.now(IST).date()
+    try:
+        if not cal.is_trading_day(today):
+            log.info("Not a trading day (%s); nothing to record", cal.holiday(today) or "weekend")
+            return
+    except UnknownYear as e:
+        log.warning("%s; recording anyway (a wasted holiday beats a missed trading day)", e)
+
+    rec, md = build(cfg, login(), today)
+    for problem in calendar_problems(cal, md.instruments(), cfg["underlyings"]):
+        log.warning("Calendar check: %s", problem)
 
     def handle(sig, _frame):
         log.info("Signal %s, stopping", sig)

@@ -79,20 +79,39 @@ Scalping is out.
   SDK's network thread), and rebuilds the feed if no data arrives for `stale_seconds`.
 - `tradeloop/recorder.py`: wiring only. Adapter -> bus -> `TickWriter` (store.py); index ticks
   drive strike selection and re-centring. Tables hold neutral IDs.
-- `tradeloop/core/`: neutral IDs, types, interfaces, event bus. Tested, no broker code.
+- `tradeloop/core/`: neutral IDs, types, interfaces, event bus, market calendar. Tested, no
+  broker code.
+- `tradeloop/core/market_calendar.py` + `market_calendar.yaml`: trading days, sessions,
+  expiries (holiday-shifted). Unknown years raise. Broker-listed expiries win; the
+  recorder cross-checks them against the calendar at startup and skips holidays.
+  Update the yaml yearly when NSE publishes the holiday list.
 - Groww's live feed runs over NATS; only the official Python SDK (`growwapi`) is used.
   Auth: TOTP (`GROWW_API_KEY` + `GROWW_TOTP_SECRET`); tokens expire 06:00 IST daily.
 
-## Next steps (in order)
+## Next steps (in order) — backtest first, then paper
+
+Groww's historical API serves 1-minute candles for indices and F&O back to 2020, so a
+rule can be tested on past expiries before paper trading. Candles have no bid/ask: the
+recorder's order-book data is what calibrates fill costs. Only ~2 years match today's
+rules (SEBI's Nov 2024 F&O changes, expiry weekday moves); older years are a robustness
+check, not the main evidence.
 
 2. Groww adapter — done in code, not yet run against the live feed.
    Archive (decided, built: `tradeloop/archive.py`): keep every recorded day forever,
    compressed. Finished days move from SQLite to Parquet after verification. Expiry days
    are the most valuable data the system produces.
-3. Market calendar.
-4. Ledger (double-entry, charges) and paper broker (fills at recorded bid/ask).
-5. Risk layer (basic limits, stale-data check) and minimal engine running Ranga's first
-   expiry-day rule from config in paper mode.
+3. Market calendar — done for 2026 onward. Expiry history before Sep 2025 (weekday
+   changes, transition exceptions) and pre-2026 trading days come from broker data in
+   step 4, not hand-written rules.
+4. Candle downloader: 1-minute candles for past NIFTY/SENSEX expiries (index + strikes
+   around ATM) into the archive format. Confirm on first real call: expired contracts
+   available, OI in option candles, rate limits.
+5. Ledger (double-entry, date-aware charges) and fill model: conservative spread/slippage
+   on candles, no fills where nothing traded; later calibrated from recorded depth.
+6. Minimal engine running Ranga's first expiry-day rule from config, in backtest mode on
+   history. Lot sizes and charges must be the ones in force on each date.
+7. Paper trading on the live feed with the same engine: paper broker fills at recorded
+   bid/ask, risk layer (basic limits, stale-data check). 4+ weeks before real money.
 
 ## Working conventions
 

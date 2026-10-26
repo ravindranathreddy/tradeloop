@@ -55,7 +55,9 @@ Schedule it for every trading day (crontab on the machine that stays on, times i
 45 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.archive >> logs/archive.log 2>&1
 ```
 
-Create `logs/` first. On holidays the recorder just records nothing and exits.
+Create `logs/` first. On weekends and exchange holidays (from `market_calendar.yaml`) the
+recorder logs the reason and exits. Update that file each December when NSE publishes the
+next year's holiday list; asking about a year that isn't there raises an error on purpose.
 
 ## First run checklist
 

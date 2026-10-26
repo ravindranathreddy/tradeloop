@@ -1,0 +1,44 @@
+# Market calendar for NSE and BSE equity and equity derivatives (same holidays on both).
+# Update once a year when NSE publishes next year's list (usually December).
+# Asking the calendar about a year not listed here raises an error on purpose.
+
+session:                 # IST, normal trading day
+  pre_open: "09:00"
+  open: "09:15"
+  close: "15:30"
+
+holidays:
+  # NSE circular NSE/CMTR/71775 (holidays 2026), plus 15 Jan added later.
+  # 10 Nov and 24 Nov also confirmed by Groww's instrument list: NIFTY expiries
+  # moved to Mon 9 Nov and Mon 23 Nov.
+  2026:
+    2026-01-15: Municipal Corporation Election - Maharashtra
+    2026-01-26: Republic Day
+    2026-03-03: Holi
+    2026-03-26: Shri Ram Navami
+    2026-03-31: Shri Mahavir Jayanti
+    2026-04-03: Good Friday
+    2026-04-14: Dr. Baba Saheb Ambedkar Jayanti
+    2026-05-01: Maharashtra Day
+    2026-05-28: Bakri Id
+    2026-06-26: Muharram
+    2026-09-14: Ganesh Chaturthi
+    2026-10-02: Mahatma Gandhi Jayanti
+    2026-10-20: Dussehra
+    2026-11-10: Diwali-Balipratipada
+    2026-11-24: Prakash Gurpurb Sri Guru Nanak Dev
+    2026-12-25: Christmas
+
+special_sessions:        # not regular trading days; strategies don't trade them
+  2026-11-08: Muhurat trading (Diwali, Sunday; timings by separate circular)
+
+# Weekly expiry weekday per index, from an effective date. If that day is a holiday,
+# expiry moves to the previous trading day. Monthly expiry is the last one in the month.
+# These rules predict and cross-check; expiry dates listed by the broker always win.
+# History before 2025-09-01 (Thursday NIFTY; Friday then Tuesday SENSEX, with transition
+# exceptions) comes from broker data in the candle downloader, not from rules here.
+expiry_rules:
+  NSE|NIFTY|IDX:
+    - {from: 2025-09-01, weekday: Tue}
+  BSE|SENSEX|IDX:
+    - {from: 2025-09-01, weekday: Thu}
