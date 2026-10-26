@@ -1,16 +1,16 @@
 db_path: data/ticks.db
 end_time: "15:31"        # IST; recorder exits after this
 poll_seconds: 0.5
+stale_seconds: 30        # no new data this long -> rebuild the feed connection
+min_free_gb: 5           # refuse to start / stop cleanly below this much free disk
 record_depth: true       # top-5 bid/ask; needed later for realistic paper fills
 
 underlyings:
-  - name: NIFTY          # must match underlying_symbol in Groww's instrument CSV
+  - name: NIFTY          # index IDs, e.g. NSE|NIFTY|IDX; feed tokens live in brokers/groww.py
     exchange: NSE
-    index_token: NIFTY   # index exchange_token, per Groww feed docs
     strikes_each_side: 15
     recenter_points: 200 # add strikes if spot moves this far from the last selection
   - name: SENSEX
     exchange: BSE
-    index_token: "1"
     strikes_each_side: 15
     recenter_points: 600

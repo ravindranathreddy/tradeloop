@@ -1,35 +1,39 @@
 """SQLite storage for recorded market data. Simple now; swap for a time-series DB later.
 
-Tables are append-only. The primary keys make re-inserting the same update a no-op.
+Instruments are neutral IDs (design rule 2). Tables are append-only; the primary
+keys make re-inserting the same update a no-op.
 """
+import json
 import sqlite3
+import time
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
+from tradeloop.core.types import Contract, Tick
+
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS ltp (
-    ts_ms INTEGER, recv_ms INTEGER, exchange TEXT, segment TEXT, token TEXT, ltp REAL,
-    PRIMARY KEY (exchange, token, ts_ms)
-);
-CREATE TABLE IF NOT EXISTS index_value (
-    ts_ms INTEGER, recv_ms INTEGER, exchange TEXT, token TEXT, value REAL,
-    PRIMARY KEY (exchange, token, ts_ms)
+CREATE TABLE IF NOT EXISTS ltp (          -- option last traded price, or index value
+    instrument TEXT, ts_ms INTEGER, recv_ms INTEGER, ltp REAL,
+    volume REAL, oi REAL,                 -- day volume so far, open interest; NULL for indices
+    PRIMARY KEY (instrument, ts_ms)
 );
 CREATE TABLE IF NOT EXISTS depth (
-    ts_ms INTEGER, recv_ms INTEGER, exchange TEXT, segment TEXT, token TEXT,
-    bid_px REAL, bid_qty REAL, ask_px REAL, ask_qty REAL, book_json TEXT,
-    PRIMARY KEY (exchange, token, ts_ms)
+    instrument TEXT, ts_ms INTEGER, recv_ms INTEGER,
+    bid_px REAL, bid_qty REAL, ask_px REAL, ask_qty REAL,
+    book_json TEXT,                       -- {"buy": [[price, qty], ...], "sell": [...]}, best first
+    PRIMARY KEY (instrument, ts_ms)
 );
-CREATE TABLE IF NOT EXISTS session_contracts (
-    session_date TEXT, exchange TEXT, token TEXT, trading_symbol TEXT, underlying TEXT,
-    expiry TEXT, strike REAL, option_type TEXT, lot_size INTEGER,
-    PRIMARY KEY (session_date, exchange, token)
+CREATE TABLE IF NOT EXISTS contracts (    -- which contracts were recorded each day
+    session_date TEXT, instrument TEXT, lot_size INTEGER,
+    PRIMARY KEY (session_date, instrument)
 );
 """
 
 
 class Store:
     def __init__(self, path: str | Path):
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
@@ -38,20 +42,12 @@ class Store:
     def write_ltp(self, rows):
         self._many("INSERT OR IGNORE INTO ltp VALUES (?,?,?,?,?,?)", rows)
 
-    def write_index(self, rows):
-        self._many("INSERT OR IGNORE INTO index_value VALUES (?,?,?,?,?)", rows)
-
     def write_depth(self, rows):
-        self._many("INSERT OR IGNORE INTO depth VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+        self._many("INSERT OR IGNORE INTO depth VALUES (?,?,?,?,?,?,?,?)", rows)
 
-    def save_session(self, session_date: str, contracts):
-        rows = [
-            (session_date, r["exchange"], str(r["exchange_token"]), r["trading_symbol"],
-             r["underlying_symbol"], str(r["expiry_date"]), float(r["strike_price"]),
-             r["instrument_type"], int(r["lot_size"]))
-            for _, r in contracts.iterrows()
-        ]
-        self._many("INSERT OR IGNORE INTO session_contracts VALUES (?,?,?,?,?,?,?,?,?)", rows)
+    def save_contracts(self, session_date: str, contracts: Iterable[Contract]):
+        rows = [(session_date, str(c.instrument), c.lot_size) for c in contracts]
+        self._many("INSERT OR IGNORE INTO contracts VALUES (?,?,?)", rows)
 
     def count(self, table: str) -> int:
         return self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -64,3 +60,33 @@ class Store:
 
     def close(self):
         self.conn.close()
+
+
+class TickWriter:
+    """Bus subscriber that stores Ticks, one transaction per batch rather than per tick."""
+
+    def __init__(self, store: Store, max_rows: int = 1000, max_seconds: float = 1.0,
+                 clock: Callable[[], float] = time.monotonic):
+        self.store, self.max_rows, self.max_seconds, self.clock = store, max_rows, max_seconds, clock
+        self._ltp: list[tuple] = []
+        self._depth: list[tuple] = []
+        self._last_flush = clock()
+
+    def on_tick(self, t: Tick) -> None:
+        iid = str(t.instrument)
+        if t.ltp is not None:
+            self._ltp.append((iid, t.ts_ms, t.recv_ms, t.ltp, t.volume, t.oi))
+        if t.bids or t.asks:
+            book = {"buy": [[lv.price, lv.qty] for lv in t.bids],
+                    "sell": [[lv.price, lv.qty] for lv in t.asks]}
+            self._depth.append((iid, t.ts_ms, t.recv_ms, t.bid, t.bid_qty, t.ask, t.ask_qty,
+                                json.dumps(book, separators=(",", ":"))))
+        if (len(self._ltp) + len(self._depth) >= self.max_rows
+                or self.clock() - self._last_flush >= self.max_seconds):
+            self.flush()
+
+    def flush(self) -> None:
+        self.store.write_ltp(self._ltp)
+        self.store.write_depth(self._depth)
+        self._ltp, self._depth = [], []
+        self._last_flush = self.clock()

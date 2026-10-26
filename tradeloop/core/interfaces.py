@@ -10,13 +10,13 @@ from collections.abc import Callable, Iterable
 from typing import Protocol, runtime_checkable
 
 from tradeloop.core.ids import InstrumentId
-from tradeloop.core.types import Fill, Order, OrderUpdate, Position, Tick
+from tradeloop.core.types import Contract, Fill, Order, OrderUpdate, Position, Tick
 
 
 @runtime_checkable
 class MarketData(Protocol):
-    def instruments(self) -> Iterable[InstrumentId]:
-        """Tradable instruments right now (used to pick strikes, expiries)."""
+    def instruments(self) -> Iterable[Contract]:
+        """Tradable contracts right now (used to pick strikes, expiries, lot sizes)."""
 
     def subscribe(self, ids: Iterable[InstrumentId]) -> None:
         """Start streaming these instruments. Adding more later is allowed."""

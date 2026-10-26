@@ -51,15 +51,38 @@ def new_client_ref() -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class Tick:
-    """One market update. Fields a feed doesn't provide stay None."""
+class Contract:
+    """A tradable instrument and the facts needed to size orders in it."""
     instrument: InstrumentId
-    ts_ms: int
+    lot_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class Level:
+    """One price level of the order book."""
+    price: float
+    qty: float
+
+
+@dataclass(frozen=True, slots=True)
+class Tick:
+    """One market update. Fields a feed doesn't provide stay None (or empty).
+
+    For an index, ltp is the index value. bids/asks are the book, best first;
+    bid/ask/bid_qty/ask_qty repeat the best level for convenience.
+    """
+    instrument: InstrumentId
+    ts_ms: int                     # exchange time
     ltp: float | None = None
     bid: float | None = None
     ask: float | None = None
     bid_qty: float | None = None
     ask_qty: float | None = None
+    recv_ms: int | None = None     # when we received it (staleness, latency)
+    volume: float | None = None    # traded today so far
+    oi: float | None = None        # open interest (derivatives)
+    bids: tuple[Level, ...] = ()
+    asks: tuple[Level, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

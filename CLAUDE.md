@@ -74,18 +74,21 @@ Scalping is out.
 
 ## Current state
 
-- `tradeloop/recorder.py` etc.: working tick recorder (Groww, SQLite). Still
-  Groww-coupled and uses Groww exchange tokens in tables — refactor in step 2.
+- `tradeloop/brokers/groww.py`: Groww `MarketData` adapter. Maps the instrument CSV and
+  feed tokens to neutral IDs, polls feed snapshots on its own loop (SDK callbacks run on the
+  SDK's network thread), and rebuilds the feed if no data arrives for `stale_seconds`.
+- `tradeloop/recorder.py`: wiring only. Adapter -> bus -> `TickWriter` (store.py); index ticks
+  drive strike selection and re-centring. Tables hold neutral IDs.
 - `tradeloop/core/`: neutral IDs, types, interfaces, event bus. Tested, no broker code.
 - Groww's live feed runs over NATS; only the official Python SDK (`growwapi`) is used.
   Auth: TOTP (`GROWW_API_KEY` + `GROWW_TOTP_SECRET`); tokens expire 06:00 IST daily.
 
 ## Next steps (in order)
 
-2. Groww adapter: `tradeloop/brokers/groww.py` implementing `MarketData` (later
-   `Execution`); map Groww CSV rows ↔ neutral IDs; feed publishes `Tick`s on the bus;
-   database writer becomes a bus subscriber storing neutral IDs; reconnect on feed drop.
-   Keep recording working throughout — data can't be recaptured.
+2. Groww adapter — done in code, not yet run against the live feed.
+   Archive (decided): keep every recorded day forever, compressed. After each session,
+   move finished days from SQLite to Parquet; verify row counts before deleting from
+   SQLite. Expiry days are the most valuable data the system produces.
 3. Market calendar.
 4. Ledger (double-entry, charges) and paper broker (fills at recorded bid/ask).
 5. Risk layer (basic limits, stale-data check) and minimal engine running Ranga's first

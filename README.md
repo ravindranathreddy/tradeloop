@@ -10,12 +10,13 @@ engine, the paper broker and the agents have real data to work with.
 
 For the nearest weekly expiry of each configured index (NIFTY on NSE, SENSEX on BSE):
 
+Every row uses neutral instrument IDs such as `NSE|NIFTY|2026-10-27|25500|CE` or `NSE|NIFTY|IDX`.
+
 | Table | What | Why |
 | --- | --- | --- |
-| `index_value` | Spot index value | Strike selection, signals |
-| `ltp` | Last traded price of each option | Signals, P&L marking |
+| `ltp` | Option last traded price, day volume and open interest; spot index value | Strike selection, signals, P&L marking |
 | `depth` | Best bid/ask plus top-5 book | Realistic paper fills and slippage |
-| `session_contracts` | Which contracts were recorded that day | Expired contracts vanish from Groww's instrument list |
+| `contracts` | Which contracts were recorded that day, with lot size | Expired contracts vanish from Groww's instrument list |
 
 Strikes: ATM ± 15 by default, re-centred if spot moves far. About 124 contracts, well under Groww's 1,000-subscription limit.
 

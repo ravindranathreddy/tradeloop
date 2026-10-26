@@ -1,117 +1,138 @@
 """Tick recorder: index values, option LTPs and top-of-book for the nearest weekly expiry.
 
-Run once per trading day (cron at ~9:05 IST). It logs in, waits for spot,
-picks strikes around ATM, then polls the feed and writes to SQLite until
-the configured end time. Strikes are re-centred if spot drifts far.
+Run once per trading day (cron at ~9:05 IST). It logs in, subscribes to the
+indices, and on the first index value picks strikes around ATM. The feed
+publishes Ticks on the bus; TickWriter stores them. Strikes are re-centred if
+spot drifts far. Exits at the configured end time.
+
+Disk guard: it won't start with less than `min_free_gb` free where the database
+lives, and stops cleanly (exit code 1) if free space drops below that mid-day.
+A full disk would break SQLite mid-session and the rest of the laptop with it.
 
     python -m tradeloop.recorder --config config.yaml
 """
 import argparse
 import logging
+import shutil
 import signal
+import sys
+import threading
 import time
-from datetime import datetime
+from collections.abc import Callable
+from datetime import date, datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import yaml
-from growwapi import GrowwFeed
 
-from tradeloop import feed_parse
-from tradeloop.auth import login
-from tradeloop.instruments import load_instruments, pick_contracts
-from tradeloop.store import Store
+from tradeloop.core.bus import Bus, Topic
+from tradeloop.core.ids import InstrumentId
+from tradeloop.core.interfaces import MarketData
+from tradeloop.core.types import Tick
+from tradeloop.instruments import pick_options
+from tradeloop.store import Store, TickWriter
 
 IST = ZoneInfo("Asia/Kolkata")
+GB = 1024 ** 3
+DISK_CHECK_SECONDS = 60
 log = logging.getLogger("recorder")
 
 
-def now_ms() -> int:
-    return int(time.time() * 1000)
+def free_bytes(path: str | Path) -> int:
+    """Free space on the disk that holds `path` (which may not exist yet)."""
+    p = Path(path).resolve().parent
+    while not p.exists():
+        p = p.parent
+    return shutil.disk_usage(p).free
+
+
+def low_disk(path: str | Path, min_free_gb: float, free=free_bytes) -> str | None:
+    """A message if free space is below min_free_gb, else None."""
+    have = free(path) / GB
+    return f"only {have:.1f} GB free for {path}, need {min_free_gb:g} GB" if have < min_free_gb else None
 
 
 class Recorder:
-    def __init__(self, cfg: dict):
-        self.cfg = cfg
-        self.store = Store(cfg["db_path"])
-        self.groww = login()
-        self.feed = GrowwFeed(self.groww)
-        self.instruments = load_instruments()
-        self.subscribed: set[tuple[str, str]] = set()   # (exchange, token)
-        self.atm_spot: dict[str, float] = {}            # underlying -> spot used for selection
-        self.stop = False
+    def __init__(self, cfg: dict, md: MarketData, store: Store, today: date,
+                 free: Callable[[str | Path], int] = free_bytes, clock: Callable[[], float] = time.monotonic):
+        self.md, self.store, self.today = md, store, today
+        self.min_free_gb = float(cfg.get("min_free_gb", 5))
+        self.free, self.clock = free, clock
+        self._disk_checked = float("-inf")
+        self.stopped_for_disk = False
+        self.bus = Bus()
+        self.writer = TickWriter(store)
+        self.underlyings = {InstrumentId.index(u["exchange"], u["name"]): u for u in cfg["underlyings"]}
+        self.centred_at: dict[InstrumentId, float] = {}   # index -> spot used for the last selection
+        self.subscribed: set[InstrumentId] = set()
+        md.on_tick(lambda t: self.bus.publish(Topic.TICK, t))
+        self.bus.subscribe(Topic.TICK, self.writer.on_tick)
+        self.bus.subscribe(Topic.TICK, self.on_tick)
 
-    # --- subscriptions ---------------------------------------------------
-    def subscribe_indices(self):
-        items = [{"exchange": u["exchange"], "segment": "CASH", "exchange_token": str(u["index_token"])}
-                 for u in self.cfg["underlyings"]]
-        self.feed.subscribe_index_value(items)
+    def start(self):
+        self.md.subscribe(self.underlyings)
 
-    def spot(self, u: dict) -> float | None:
-        snap = self.feed.get_index_value() or {}
-        d = snap.get(u["exchange"], {}).get("CASH", {}).get(str(u["index_token"]))
-        return float(d["value"]) if d and d.get("value") else None
-
-    def subscribe_contracts(self, u: dict, spot: float):
-        today = datetime.now(IST).date()
-        picked = pick_contracts(self.instruments, u["exchange"], u["name"], spot,
-                                u["strikes_each_side"], today)
-        if picked.empty:
-            log.warning("No contracts found for %s on %s", u["name"], u["exchange"])
+    def check_disk(self):
+        """Stop recording if the disk is nearly full. Checked at most once a minute."""
+        now = self.clock()
+        if now - self._disk_checked < DISK_CHECK_SECONDS:
             return
-        new = picked[[(u["exchange"], str(t)) not in self.subscribed for t in picked["exchange_token"]]]
-        if new.empty:
+        self._disk_checked = now
+        problem = low_disk(self.store.path, self.min_free_gb, self.free)
+        if problem:
+            log.error("Stopping: %s", problem)
+            self.stopped_for_disk = True
+            self.md.stop()
+
+    def on_tick(self, tick: Tick):
+        self.check_disk()
+        u = self.underlyings.get(tick.instrument)
+        if u is None or tick.ltp is None:
             return
-        items = [{"exchange": u["exchange"], "segment": "FNO", "exchange_token": str(t)}
-                 for t in new["exchange_token"]]
-        self.feed.subscribe_ltp(items)
-        if self.cfg.get("record_depth", True):
-            self.feed.subscribe_market_depth(items)
-        self.store.save_session(today.isoformat(), new)
-        self.subscribed.update((u["exchange"], str(t)) for t in new["exchange_token"])
-        self.atm_spot[u["name"]] = spot
+        last = self.centred_at.get(tick.instrument)
+        if last is None or abs(tick.ltp - last) >= u["recenter_points"]:
+            self.select(tick.instrument, u, tick.ltp)
+
+    def select(self, index: InstrumentId, u: dict, spot: float):
+        self.centred_at[index] = spot
+        picked = pick_options(self.md.instruments(), u["exchange"], u["name"], spot,
+                              u["strikes_each_side"], self.today)
+        new = [c for c in picked if c.instrument not in self.subscribed]
+        if not picked:
+            log.warning("No contracts found for %s", index)
+        if not new:
+            return
+        self.store.save_contracts(self.today.isoformat(), new)
+        self.md.subscribe(c.instrument for c in new)
+        self.subscribed.update(c.instrument for c in new)
         log.info("%s: +%d contracts (expiry %s, spot %.1f), total %d",
-                 u["name"], len(new), new["expiry_date"].iloc[0], spot, len(self.subscribed))
+                 u["name"], len(new), new[0].instrument.expiry, spot, len(self.subscribed))
 
-    def maybe_recenter(self):
-        for u in self.cfg["underlyings"]:
-            spot, last = self.spot(u), self.atm_spot.get(u["name"])
-            if spot and last and abs(spot - last) >= u["recenter_points"]:
-                self.subscribe_contracts(u, spot)
-
-    # --- main loop ---------------------------------------------------------
-    def run(self):
-        end = datetime.strptime(self.cfg["end_time"], "%H:%M").time()
-        poll = float(self.cfg.get("poll_seconds", 0.5))
-        self.subscribe_indices()
-
-        for u in self.cfg["underlyings"]:
-            for _ in range(120):                      # wait up to ~60s for a first spot value
-                spot = self.spot(u)
-                if spot:
-                    self.subscribe_contracts(u, spot)
-                    break
-                time.sleep(0.5)
-            else:
-                log.error("No spot for %s; skipping its options today", u["name"])
-
-        last_recenter = time.time()
-        while not self.stop and datetime.now(IST).time() < end:
-            recv = now_ms()
-            self.store.write_index(feed_parse.index_rows(self.feed.get_index_value(), recv))
-            self.store.write_ltp(feed_parse.ltp_rows(self.feed.get_ltp(), recv))
-            if self.cfg.get("record_depth", True):
-                self.store.write_depth(feed_parse.depth_rows(self.feed.get_market_depth(), recv))
-            if time.time() - last_recenter > 600:
-                self.maybe_recenter()
-                last_recenter = time.time()
-            time.sleep(poll)
-
-        log.info("Done. rows: index=%d ltp=%d depth=%d",
-                 self.store.count("index_value"), self.store.count("ltp"), self.store.count("depth"))
+    def finish(self):
+        self.writer.flush()
+        log.info("Done. rows: ltp=%d depth=%d", self.store.count("ltp"), self.store.count("depth"))
         self.store.close()
 
 
+def seconds_until(end: str) -> float:
+    now = datetime.now(IST)
+    end_dt = datetime.combine(now.date(), datetime.strptime(end, "%H:%M").time(), IST)
+    return max(0.0, (end_dt - now).total_seconds())
+
+
+def build(cfg: dict, api, today: date, **adapter_kw):
+    """Wire the Groww adapter, store and recorder. Tests pass fakes via adapter_kw."""
+    from tradeloop.brokers.groww import GrowwMarketData
+
+    md = GrowwMarketData(api, depth=cfg.get("record_depth", True),
+                         poll_seconds=float(cfg.get("poll_seconds", 0.5)),
+                         stale_seconds=float(cfg.get("stale_seconds", 30)), **adapter_kw)
+    return Recorder(cfg, md, Store(cfg["db_path"]), today), md
+
+
 def main():
+    from tradeloop.auth import login
+
     p = argparse.ArgumentParser()
     p.add_argument("--config", default="config.yaml")
     args = p.parse_args()
@@ -119,15 +140,28 @@ def main():
         cfg = yaml.safe_load(f)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    rec = Recorder(cfg)
+    problem = low_disk(cfg["db_path"], float(cfg.get("min_free_gb", 5)))
+    if problem:
+        log.error("Not starting: %s", problem)
+        sys.exit(1)
+
+    rec, md = build(cfg, login(), datetime.now(IST).date())
 
     def handle(sig, _frame):
         log.info("Signal %s, stopping", sig)
-        rec.stop = True
+        md.stop()
 
     signal.signal(signal.SIGINT, handle)
     signal.signal(signal.SIGTERM, handle)
-    rec.run()
+    timer = threading.Timer(seconds_until(cfg["end_time"]), md.stop)
+    timer.daemon = True
+    timer.start()
+
+    rec.start()
+    md.run()
+    rec.finish()
+    if rec.stopped_for_disk:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
