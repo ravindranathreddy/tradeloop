@@ -86,9 +86,9 @@ Scalping is out.
 ## Next steps (in order)
 
 2. Groww adapter — done in code, not yet run against the live feed.
-   Archive (decided): keep every recorded day forever, compressed. After each session,
-   move finished days from SQLite to Parquet; verify row counts before deleting from
-   SQLite. Expiry days are the most valuable data the system produces.
+   Archive (decided, built: `tradeloop/archive.py`): keep every recorded day forever,
+   compressed. Finished days move from SQLite to Parquet after verification. Expiry days
+   are the most valuable data the system produces.
 3. Market calendar.
 4. Ledger (double-entry, charges) and paper broker (fills at recorded bid/ask).
 5. Risk layer (basic limits, stale-data check) and minimal engine running Ranga's first

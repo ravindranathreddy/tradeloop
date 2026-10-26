@@ -39,14 +39,20 @@ No static IP is needed for recording; it's only required later for placing order
 
 ```bash
 python -m tradeloop.recorder --config config.yaml   # runs until 15:31 IST, then exits
-python -m tradeloop.health --db data/ticks.db       # after close: rows and any empty minutes
+python -m tradeloop.health --db data/ticks.db       # after close: rows, empty minutes, disk headroom
+python -m tradeloop.archive                          # move earlier days to data/archive/<date>/*.parquet
 ```
+
+Every recorded day is kept. The archive step moves each finished day out of SQLite into
+compressed Parquet files (verified before anything is deleted), so the database holds only
+about the current day. `tradeloop.archive.read_day()` reads a day wherever it lives.
 
 Schedule it for every trading day (crontab on the machine that stays on, times in IST):
 
 ```cron
 5 9 * * 1-5   cd ~/tradeloop && .venv/bin/python -m tradeloop.recorder >> logs/recorder.log 2>&1
 40 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.health >> logs/health.log 2>&1
+45 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.archive >> logs/archive.log 2>&1
 ```
 
 Create `logs/` first. On holidays the recorder just records nothing and exits.
