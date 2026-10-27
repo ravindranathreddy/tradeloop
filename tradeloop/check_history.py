@@ -15,6 +15,7 @@ Per expiry file it checks:
   settlement  the official close (daily candle) exists, and near-the-money options' last
               price on expiry day is within a few points of their value at that close
   coverage    option contracts, how many traded on expiry day, share of rows with OI
+  lot size    traded volumes are whole lots of the size in lot_sizes.yaml
 
 Settlement is the strongest check: a wrong strike, timestamp or file mix-up shows up
 as options settling far from (official close - strike).
@@ -29,7 +30,9 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from tradeloop.core.ids import InstrumentId
 from tradeloop.core.market_calendar import default_calendar
+from tradeloop.lot_sizes import default_lot_sizes
 
 IST = ZoneInfo("Asia/Kolkata")
 SETTLE_TOLERANCE = 5.0           # points; last trades happen a little before 15:30
@@ -93,6 +96,19 @@ def check_expiry(candles: pd.DataFrame, daily: pd.DataFrame | None, expiry: date
     r["oi_share"] = round(float(opts["oi"].notna().mean()), 2) if len(opts) else 0.0
     if r["contracts"] == 0:
         p.append("no option contracts")
+
+    # lot size: traded volume is always a whole number of lots
+    traded = opts[opts["volume"].fillna(0) > 0]
+    if len(traded):
+        try:
+            lot = default_lot_sizes().lot_size(InstrumentId.parse(traded["instrument"].iloc[0]))
+        except KeyError:
+            p.append("no lot size in lot_sizes.yaml for this expiry")
+        else:
+            r["lot_size"] = lot
+            whole = float((traded["volume"] % lot == 0).mean())
+            if whole < 0.98:                  # a few stray prints aren't whole lots
+                p.append(f"only {whole:.0%} of traded volumes are whole lots of {lot}: lot_sizes.yaml wrong?")
 
     # settlement against the official close
     close = None

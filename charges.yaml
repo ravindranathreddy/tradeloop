@@ -1,0 +1,56 @@
+# Charges on index options and futures. Each list entry applies from its date until the
+# next one. Rates are percent: of premium turnover for options, of contract value for
+# futures. Charged per fill, rounded to the paisa (STT to the rupee); GST on brokerage +
+# exchange + SEBI + IPFT.
+#
+# Checked against Groww's charges calculator (Oct 2026): 65 NIFTY options bought at 1000,
+# sold at 1500 -> brokerage 40, STT 146 (rounded to the rupee), exchange 56.92, SEBI 0.16,
+# GST 17.47, stamp 1.95, no IPFT; total 262.50 (we get 262.52: we round per fill, Groww
+# on the round trip's turnover). Still compare with a real contract note once live.
+# "approx: true" marks periods where the exchange charged brokers by monthly turnover
+# slab (before SEBI's uniform-fee rule, 1 Oct 2024); we use the top slab, which is
+# conservative. Older years are robustness checks, not the main evidence.
+
+brokerage:
+  # Groww F&O: flat Rs 20 per executed order (Groww's calculator). Not charged on expiry
+  # settlement (assumed).
+  - {from: 2020-01-01, per_order: 20.00}
+
+stt:
+  # Rounded to the rupee. Sell side on premium; exercise = long in-the-money options
+  # settled at expiry, on intrinsic value. Finance Act 2023 (from 1 Apr 2023), Budget 2024 (from 1 Oct 2024),
+  # Budget 2026 (from 1 Apr 2026).
+  - {from: 2020-01-01, option_sell: 0.05,   option_exercise: 0.125, future_sell: 0.01}
+  - {from: 2023-04-01, option_sell: 0.0625, option_exercise: 0.125, future_sell: 0.0125}
+  - {from: 2024-10-01, option_sell: 0.1,    option_exercise: 0.125, future_sell: 0.02}
+  - {from: 2026-04-01, option_sell: 0.15,   option_exercise: 0.15,  future_sell: 0.05}
+
+exchange:
+  # Transaction charge, both sides.
+  NSE:
+    - {from: 2020-01-01, option: 0.05, future: 0.002, approx: true}   # slabs, top Rs 50/lakh
+    - {from: 2024-10-01, option: 0.03503, future: 0.00173}            # uniform fee
+  BSE:
+    - {from: 2020-01-01, option: 0.0375, future: 0.0, approx: true}   # slabs from Nov 2023, top Rs 3,750/crore
+    - {from: 2024-05-13, option: 0.049,  future: 0.0, approx: true}   # slabs raised 24-32%
+    - {from: 2024-10-01, option: 0.0325, future: 0.0}                 # uniform Rs 3,250/crore; futures nil
+
+ipft:
+  # Investor Protection Fund Trust levy. NSE lists Rs 50/crore on options, but Groww's
+  # calculator doesn't pass it on (some brokers do), so 0 here.
+  NSE:
+    - {from: 2020-01-01, option: 0.0, future: 0.0}
+  BSE:
+    - {from: 2020-01-01, option: 0.0, future: 0.0}
+
+sebi:
+  # SEBI turnover fee, Rs 10/crore, both sides.
+  - {from: 2020-01-01, rate: 0.0001}
+
+stamp:
+  # Buy side only. Uniform national rates from 1 Jul 2020; before that it varied by
+  # state, so the uniform rate stands in (approx).
+  - {from: 2020-01-01, option_buy: 0.003, future_buy: 0.002}
+
+gst:
+  - {from: 2020-01-01, rate: 18}

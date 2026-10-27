@@ -84,6 +84,25 @@ where it stopped and retries failed expiries; `--refetch` downloads a range agai
 - Data is git-ignored and must stay so (exchange data, public repo). Back up
   `candles_1m/` and `candles_1d/` privately; `greeks_1m/` can be recomputed.
 
+## Ledger, charges and fills (for backtests and paper)
+
+- `tradeloop/ledger.py`: double-entry, integer paise; every entry balances. Records fills
+  with average cost and realised P&L, every charge per fill, and expiry settlement
+  (options at intrinsic value against the official close; STT on long in-the-money ones).
+- `charges.yaml` / `tradeloop/charges.py`: brokerage, STT, exchange, SEBI, IPFT, stamp
+  duty and GST, each with the date it took effect and its source. Rates change (STT on
+  option sales: 0.05% -> 0.0625% Apr 2023 -> 0.1% Oct 2024 -> 0.15% Apr 2026).
+- `lot_sizes.yaml` / `tradeloop/lot_sizes.py`: lot size by expiry since 2020 (NIFTY
+  75 -> 50 -> 25 -> 75 -> 65; SENSEX 10 -> 20), matching every downloaded expiry's volumes.
+- `tradeloop/fill_model.py`: conservative fills from 1-minute candles (next minute's open
+  plus slippage, nothing where nothing traded, at most 10% of a minute's volume).
+
+Worked example (`tests/test_ledger.py`): buy 1 NIFTY lot (65) at 100, sell at 120 on
+20 Oct 2026. Gross Rs 1,300.00, charges Rs 65.33 (buy 26.50: brokerage 20, exchange 2.28,
+SEBI 0.01, stamp 0.20, GST 4.01; sell 38.83: brokerage 20, STT 12 (rounded to the rupee),
+exchange 2.73, SEBI 0.01, GST 4.09), net Rs 1,234.67. The rates match Groww's charges
+calculator to within 2 paise (it rounds on the round trip, we per fill).
+
 ## First run checklist
 
 - Log shows `NIFTY: +62 contracts (expiry ...)` and the same for SENSEX within a minute of starting.
@@ -103,8 +122,9 @@ where it stopped and retries failed expiries; `--refetch` downloads a range agai
 | `tradeloop/core/` | Broker-neutral core: instrument IDs, types, `MarketData`/`Execution` interfaces, event bus |
 | `tradeloop/recorder.py`, `instruments.py`, `feed_parse.py`, `store.py`, `health.py` | Tick recorder (Groww) |
 | `tradeloop/backfill.py`, `greeks.py`, `derive_greeks.py`, `check_history.py` | Historical candles, IV/Greeks, quality check |
+| `tradeloop/ledger.py`, `charges.py`, `lot_sizes.py`, `fill_model.py` | Ledger, dated charges and lot sizes, backtest fills |
 | `CLAUDE.md` | Architecture rules and next steps, for Claude Code |
 
 ## Next
 
-Ledger (with charges) and a fill model, then a minimal engine running one expiry-day rule as a backtest on the downloaded history, then paper trading on the live feed. See `CLAUDE.md`.
+A minimal engine running one expiry-day rule as a backtest on the downloaded history, then paper trading on the live feed. See `CLAUDE.md`.

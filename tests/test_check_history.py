@@ -17,7 +17,7 @@ def frame(close=25549.0, settle_shift=0.0, extra=()):
         for kind in ("CE", "PE"):
             v = max(0, close - k) if kind == "CE" else max(0, k - close)
             px = max(0.05, v + settle_shift)
-            rows.append((f"NSE|NIFTY|{EXP}|{k}|{kind}", ms(15, 29), px, px, px, px, 650.0, 1000.0))
+            rows.append((f"NSE|NIFTY|{EXP}|{k}|{kind}", ms(15, 29), px, px, px, px, 750.0, 1000.0))
     rows += list(extra)
     candles = pd.DataFrame(rows, columns=["instrument", "ts_ms", "open", "high", "low", "close", "volume", "oi"])
     daily = pd.DataFrame([("NSE|NIFTY|IDX", ms(0, 0), 25240, 25560, 25020, close, None, None)],
@@ -37,8 +37,8 @@ def test_systematic_settlement_error_is_a_problem():
 
 def test_structure_problems_and_special_session_note():
     dup = ("NSE|NIFTY|IDX", ms(9, 15), 25500, 25510, 25490, 25500, None, None)
-    broken = (f"NSE|NIFTY|{EXP}|25500|CE", ms(10, 0), 50, 40, 60, 50, 65.0, None)       # low > high
-    muhurat = (f"NSE|NIFTY|{EXP}|25500|CE", ms(18, 30, date(2025, 6, 21)), 50, 50, 50, 50, 65.0, None)
+    broken = (f"NSE|NIFTY|{EXP}|25500|CE", ms(10, 0), 50, 40, 60, 50, 75.0, None)       # low > high
+    muhurat = (f"NSE|NIFTY|{EXP}|25500|CE", ms(18, 30, date(2025, 6, 21)), 50, 50, 50, 50, 75.0, None)
     r = check_expiry(*frame(extra=[dup, broken, muhurat]), EXP)
     assert "1 duplicate rows" in r["problems"] and "1 impossible candles" in r["problems"]
     assert any("special session" in n and "2025-06-21" in n for n in r["notes"])
@@ -50,3 +50,10 @@ def test_missing_official_close_and_index_gap():
     r = check_expiry(candles, None, EXP)
     assert "no official close (daily candle) for expiry day" in r["problems"]
     assert any("index missing 1 of 375" in p for p in r["problems"])
+
+
+def test_volumes_that_are_not_whole_lots_flag_the_lot_table():
+    candles, daily = frame()
+    candles.loc[candles["volume"].notna(), "volume"] = 650.0     # lot is 75 on this expiry
+    r = check_expiry(candles, daily, EXP)
+    assert any("lot_sizes.yaml wrong" in p for p in r["problems"])

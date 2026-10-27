@@ -1,0 +1,23 @@
+# Lot size of index options and futures, by expiry: a contract expiring on or after
+# `from` has that lot (until the next entry). Exchanges phase changes in by contract, so
+# contracts listed before a change keep the old lot: those are listed under exceptions.
+#
+# Every entry matches the exchange circular and our downloaded candles (traded volume is
+# always a multiple of the lot); check_history flags any expiry where it isn't.
+
+NSE|NIFTY|IDX:
+  changes:
+    - {from: 2020-01-01, lot: 75}
+    - {from: 2021-07-29, lot: 50}   # NSE, Apr 2021: from the July 2021 monthly; weeklies to 22 Jul kept 75
+    - {from: 2024-05-02, lot: 25}   # NSE, Apr 2024 (effective 26 Apr 2024)
+    - {from: 2025-01-02, lot: 75}   # SEBI contract-size rules (circular 1 Oct 2024)
+    - {from: 2026-01-06, lot: 65}   # NSE/FAOP/70616, 3 Oct 2025
+  exceptions:
+    2025-01-30: 25                  # January monthly, listed before the change
+
+BSE|SENSEX|IDX:
+  changes:
+    - {from: 2020-01-01, lot: 10}
+    - {from: 2025-01-07, lot: 20}   # BSE, Oct 2024 (SEBI contract-size rules)
+  exceptions:
+    2025-01-28: 10                  # January monthly, listed before the change

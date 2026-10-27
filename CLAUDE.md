@@ -112,9 +112,13 @@ check, not the main evidence.
    them. Options settle within ~0.5 pts of the official close. Known gaps (backtests skip):
    NIFTY 2026-07-07 and SENSEX 2026-02-26 (Groww's contract list incomplete), NIFTY
    2026-09-29 (data stops ~14:00), SENSEX 2023-10-20 (a few strikes settle 6-13 pts off).
-   Lot sizes aren't in Groww's history; step 6 needs them from NSE/BSE.
-5. Ledger (double-entry, date-aware charges) and fill model: conservative spread/slippage
-   on candles, no fills where nothing traded; later calibrated from recorded depth.
+   Lot sizes aren't in Groww's history: they're in lot_sizes.yaml (step 5).
+5. Ledger and fill model — done (`ledger.py`, `charges.py` + `charges.yaml`, `lot_sizes.py`
+   + `lot_sizes.yaml`, `fill_model.py`). Money in integer paise; charges dated with
+   sources; lot sizes verified against every expiry's volumes; charges match Groww's
+   calculator (Rs 20/order, STT rounded to the rupee, no IPFT). Open: pre-Oct-2024
+   exchange slabs are approximations; compare with a real contract note once live. Slippage defaults are a guess until recorded depth
+   calibrates them. Margin isn't modelled yet (risk layer, step 7).
 6. Minimal engine running Ranga's first expiry-day rule from config, in backtest mode on
    history. Lot sizes and charges must be the ones in force on each date.
 7. Paper trading on the live feed with the same engine: paper broker fills at recorded
