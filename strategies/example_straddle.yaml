@@ -6,3 +6,4 @@ side: BUY
 lots: 1
 entry_time: "09:20"
 exit_time: "15:00"
+days: all               # every trading day of the expiry week; "expiry" for expiry day only

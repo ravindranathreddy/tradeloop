@@ -66,7 +66,8 @@ Agents
 
 ## Tracks
 
-F&O expiry-day (building now) → swing trades → intraday equities. Long-term investing is
+F&O on weekly index options (building now; any day of the expiry week, expiry day
+first) → swing trades → intraday equities. Long-term investing is
 a separate research-memo track (no auto-trades; holdings stay outside the bot account).
 Its research agent reads annual reports, concall transcripts, exchange filings and
 brokerage reports, and writes memos that cite their sources.
@@ -114,9 +115,10 @@ check, not the main evidence.
    step 4, not hand-written rules.
 4. Candle downloader — done. 523 expiries: NIFTY Jan 2020-Oct 2026, SENSEX Aug 2023-Oct
    2026, ~680 MB. Expired contracts and OI available; no IV/Greeks from Groww, so we derive
-   them. Options settle within ~0.5 pts of the official close. Known gaps (backtests skip):
-   NIFTY 2026-07-07 and SENSEX 2026-02-26 (Groww's contract list incomplete), NIFTY
-   2026-09-29 (data stops ~14:00), SENSEX 2023-10-20 (a few strikes settle 6-13 pts off).
+   them. Options settle within ~0.5 pts of the official close. Strikes come from the strike
+   grid, not Groww's contract list (it omits contracts that exist: 1,930 recovered). Known
+   gaps (backtests skip, data_quality.yaml): NIFTY 2026-09-29 (data stops ~14:00), SENSEX
+   2023-10-20 (a few strikes settle 6-13 pts off).
    Lot sizes aren't in Groww's history: they're in lot_sizes.yaml (step 5).
 5. Ledger and fill model — done (`ledger.py`, `charges.py` + `charges.yaml`, `lot_sizes.py`
    + `lot_sizes.yaml`, `fill_model.py`). Money in integer paise; charges dated with
@@ -125,7 +127,8 @@ check, not the main evidence.
    exchange slabs are approximations; compare with a real contract note once live. Slippage defaults are a guess until recorded depth
    calibrates them. Margin isn't modelled yet (risk layer, step 7).
 6. Engine — built (`engine.py`, `sim_broker.py`, `backtest.py`), tested with an EXAMPLE
-   rule (`strategies/example_straddle.yaml`, not a trading idea). Next: Ranga's first real
+   rule (`strategies/example_straddle.yaml`, not a trading idea). Replays every trading
+   day (not only expiry day), nearest weekly expiry's contracts, overnight holds allowed. Next: Ranga's first real
    rule, found and tested by the research method below.
 7. Paper trading on the live feed with the same engine: paper broker fills at recorded
    bid/ask, risk layer (basic limits, stale-data check). 4+ weeks before real money.

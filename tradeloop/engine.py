@@ -6,8 +6,9 @@ candles through SimBroker; paper and live will feed minutes from the recorder's 
 Strategies see positions from confirmed fills only (design rule 7), never from orders
 merely sent. Every order carries strategy_id and config_version (rule 8).
 
-A strategy is any object with `on_minute(ctx: Context) -> None`; a new instance per
-trading day, so state never leaks from one expiry to the next.
+A strategy is any object with `on_minute(ctx: Context) -> None`. A backtest creates one
+instance per expiry week, so a strategy can remember earlier days and hold positions
+overnight, but nothing leaks from one expiry to the next.
 """
 from __future__ import annotations
 
@@ -54,6 +55,15 @@ class Context:
     def time(self) -> time:
         """IST wall-clock time of this decision (the end of the minute just closed)."""
         return datetime.fromtimestamp(self.now_ms / 1000, IST).time()
+
+    @property
+    def today(self) -> date:
+        return datetime.fromtimestamp(self.now_ms / 1000, IST).date()
+
+    @property
+    def days_to_expiry(self) -> int:
+        """Calendar days: 0 on expiry day."""
+        return (self.expiry - self.today).days
 
     def positions(self) -> dict[InstrumentId, int]:
         """Signed quantities from confirmed fills."""

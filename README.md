@@ -111,11 +111,14 @@ calculator to within 2 paise (it rounds on the round trip, we per fill).
 python -m tradeloop.backtest strategies/example_straddle.yaml --from 2025-01-01
 ```
 
-Replays each expiry day minute by minute through the same engine paper and live trading
-will use: the strategy sees each minute's prices, IV and Greeks, orders fill from the next
-minute through the fill model, the ledger books charges, and anything open at the close
-settles at the official close. One row per expiry (gross, charges, net) goes to
-`data/backtests/`, plus a summary: net, win rate, worst day, max drawdown, by year.
+Replays every trading day, minute by minute, through the same engine paper and live
+trading will use. Each day runs under the expiry that was nearest that day (the data
+holds each weekly expiry's final week). The strategy sees each minute's prices, IV and
+Greeks and how many days are left to expiry; orders fill from the next minute through
+the fill model; unfilled orders lapse at the close; positions may be held overnight;
+anything open at expiry settles at the official close. One row per trading day (gross,
+charges, net) goes to `data/backtests/`, plus a summary: net, win rate, worst day, max
+drawdown, by days to expiry and by year.
 Expiries with known data problems are skipped (`data_quality.yaml`).
 
 A strategy is a class with `on_minute(ctx)` (`tradeloop/strategies/`); its parameters live
