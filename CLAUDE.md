@@ -91,6 +91,11 @@ Scalping is out.
   `data/history/` (git-ignored), IV/Greeks derived, quality checked. See README.
 - Groww's live feed runs over NATS; only the official Python SDK (`growwapi`) is used.
   Auth: TOTP (`GROWW_API_KEY` + `GROWW_TOTP_SECRET`); tokens expire 06:00 IST daily.
+  The live LTP stream rarely carries volume/OI (the SDK prints missing fields as 0), so
+  the recorder stores them as NULL. `chain_recorder.py` fills the gap live: Groww's option
+  chain (LTP, volume, OI, IV, Greeks per strike) once a minute into data/chain.db. Strategies
+  use our own IV/Greeks (same code as backtest); Groww's are a cross-check (its theta is
+  capped at the premium, ours is the per-day rate).
 
 ## Next steps (in order) — backtest first, then paper
 
@@ -119,10 +124,23 @@ check, not the main evidence.
    calculator (Rs 20/order, STT rounded to the rupee, no IPFT). Open: pre-Oct-2024
    exchange slabs are approximations; compare with a real contract note once live. Slippage defaults are a guess until recorded depth
    calibrates them. Margin isn't modelled yet (risk layer, step 7).
-6. Minimal engine running Ranga's first expiry-day rule from config, in backtest mode on
-   history. Lot sizes and charges must be the ones in force on each date.
+6. Engine — built (`engine.py`, `sim_broker.py`, `backtest.py`), tested with an EXAMPLE
+   rule (`strategies/example_straddle.yaml`, not a trading idea). Next: Ranga's first real
+   rule, found and tested by the research method below.
 7. Paper trading on the live feed with the same engine: paper broker fills at recorded
    bid/ask, risk layer (basic limits, stale-data check). 4+ weeks before real money.
+
+## Research method (how rules are found)
+
+Rules should come from data (IV, Greeks, OI, price), but 523 expiries will always contain
+patterns that worked by luck. Every candidate rule:
+- starts from a stated reason it should work, then is tested; no blind parameter scans;
+- is developed on 2020-2024 and judged once on 2025-2026 (held out; also today's market
+  rules). A rule that only works where it was tuned is dropped;
+- is judged after charges and slippage (the backtest always includes both);
+- needs hundreds of trades and must hold across years and conditions, not one stretch;
+- comes with a count of variants tried: the more tried, the stronger the result must be.
+Agents propose rules with this evidence; Ranga approves. Nothing trades unapproved.
 
 ## Working conventions
 

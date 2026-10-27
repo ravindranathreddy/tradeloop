@@ -17,6 +17,9 @@ the F&O close.
 
 Slippage is the larger of `slippage_ticks` ticks and `slippage_pct` of the price. The
 defaults are a guess; the recorder's order-book data is what will calibrate them.
+
+The model steps one candle at a time (`start`, `step`, `expired`), so a broker can
+drive it minute by minute; `fill` runs a whole series at once.
 """
 from __future__ import annotations
 
@@ -33,6 +36,17 @@ TICK = 0.05
 MINUTE_MS = 60_000
 
 
+@dataclass(slots=True)
+class Working:
+    """An order the model is trying to fill."""
+    order: Order
+    placed_ms: int
+    lot_size: int
+    remaining: int
+    triggered: bool = False
+    fills: int = 0
+
+
 @dataclass(frozen=True, slots=True)
 class FillModel:
     slippage_ticks: int = 2
@@ -43,39 +57,50 @@ class FillModel:
     def slippage(self, price: float) -> float:
         return max(self.slippage_ticks * TICK, price * self.slippage_pct / 100)
 
-    def fill(self, order: Order, decided_ms: int, candles: pd.DataFrame, lot_size: int) -> list[Fill]:
-        """Fills for `order`, given that instrument's 1-minute candles (columns ts_ms, open,
-        high, low, close, volume). Returns [] if nothing fills; a partial fill is normal."""
+    def start(self, order: Order, decided_ms: int, lot_size: int) -> Working:
         if order.order_type is OrderType.SL:
             raise NotImplementedError("stop-limit orders: use SL_M or LIMIT")
         if order.qty % lot_size:
             raise ValueError(f"qty {order.qty} is not a whole number of lots of {lot_size}")
-        day = datetime.fromtimestamp(decided_ms / 1000, IST).date()
-        close = datetime.combine(day, default_calendar().close_time(day), IST)
-        close_ms = int(close.timestamp() * 1000)
-        c = candles[(candles["ts_ms"] >= decided_ms) & (candles["ts_ms"] < close_ms)].sort_values("ts_ms")
-        if order.order_type is not OrderType.SL_M:
-            c = c[c["ts_ms"] < decided_ms + self.max_wait_minutes * MINUTE_MS]
+        return Working(order, decided_ms, lot_size, order.qty)
 
-        fills: list[Fill] = []
-        remaining, triggered = order.qty, False
-        buy = order.side is Side.BUY
+    def expired(self, w: Working, ts_ms: int) -> bool:
+        """MARKET and LIMIT orders give up after the wait; stops rest until the close."""
+        return w.order.order_type is not OrderType.SL_M and \
+            ts_ms >= w.placed_ms + self.max_wait_minutes * MINUTE_MS
+
+    def step(self, w: Working, row) -> Fill | None:
+        """Try to fill `w` in one candle (attributes ts_ms, open, high, low, close, volume).
+        Updates `w`; the caller drops it once `w.remaining` is 0."""
+        if w.remaining == 0 or row.ts_ms < w.placed_ms or not (row.volume and row.volume > 0):
+            return None
+        buy = w.order.side is Side.BUY
+        price = self._price(w.order, row, buy, w.triggered)
+        if price is None:
+            return None
+        w.triggered = True
+        room = int(row.volume * self.max_volume_share) // w.lot_size * w.lot_size
+        qty = min(w.remaining, room)
+        if qty == 0:
+            return None
+        w.remaining -= qty
+        w.fills += 1
+        return Fill(f"{w.order.client_ref}-{w.fills}", w.order.client_ref, w.order.instrument,
+                    w.order.side, qty, price, int(row.ts_ms))
+
+    def fill(self, order: Order, decided_ms: int, candles: pd.DataFrame, lot_size: int) -> list[Fill]:
+        """Fills for `order`, given that instrument's 1-minute candles (columns ts_ms, open,
+        high, low, close, volume). Returns [] if nothing fills; a partial fill is normal."""
+        w = self.start(order, decided_ms, lot_size)
+        close_ms = session_close_ms(decided_ms)
+        c = candles[(candles["ts_ms"] >= decided_ms) & (candles["ts_ms"] < close_ms)].sort_values("ts_ms")
+        fills = []
         for row in c.itertuples(index=False):
-            if remaining == 0:
+            if w.remaining == 0 or self.expired(w, row.ts_ms):
                 break
-            if not (row.volume and row.volume > 0):
-                continue
-            price = self._price(order, row, buy, triggered)
-            if price is None:
-                continue
-            triggered = True
-            room = int(row.volume * self.max_volume_share) // lot_size * lot_size
-            qty = min(remaining, room)
-            if qty == 0:
-                continue
-            remaining -= qty
-            fills.append(Fill(f"{order.client_ref}-{len(fills) + 1}", order.client_ref, order.instrument,
-                              order.side, qty, price, int(row.ts_ms)))
+            f = self.step(w, row)
+            if f:
+                fills.append(f)
         return fills
 
     def _price(self, order: Order, row, buy: bool, triggered: bool) -> float | None:
@@ -95,6 +120,12 @@ class FillModel:
             base = max(row.open, order.trigger) if buy else min(row.open, order.trigger)
         raw = base + self.slippage(base) if buy else base - self.slippage(base)
         return _to_tick(raw, up=buy)
+
+
+def session_close_ms(ts_ms: int) -> int:
+    """The F&O close on the IST day of `ts_ms`."""
+    day = datetime.fromtimestamp(ts_ms / 1000, IST).date()
+    return int(datetime.combine(day, default_calendar().close_time(day), IST).timestamp() * 1000)
 
 
 def _to_tick(price: float, up: bool) -> float:

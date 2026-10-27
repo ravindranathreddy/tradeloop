@@ -57,6 +57,12 @@ def test_ltp_ticks_use_neutral_ids_and_skip_unknown_tokens():
     assert (t.volume, t.oi) == (1250.0, 98765.0)
 
 
+def test_zero_volume_and_oi_mean_not_sent():
+    snap = {"ltp": {"NSE": {"FNO": {"35241": {"tsInMillis": 1.0, "ltp": 87.3, "volume": 0.0, "openInterest": 0.0}}}}}
+    (t,) = list(groww.ltp_ticks(snap, IDS, recv_ms=7))
+    assert (t.volume, t.oi) == (None, None)
+
+
 def test_index_ticks():
     ticks = {t.instrument: t.ltp for t in groww.index_ticks(INDEX, IDS, 1)}
     assert ticks == {NIFTY: 24386.7, SENSEX: 73386.7}

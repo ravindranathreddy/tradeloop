@@ -39,6 +39,7 @@ No static IP is needed for recording; it's only required later for placing order
 
 ```bash
 python -m tradeloop.recorder --config config.yaml   # runs until 15:41 IST (F&O closes 15:40), then exits
+python -m tradeloop.chain_recorder                   # once a minute: full option chain (volume, OI, IV, Greeks)
 python -m tradeloop.health --db data/ticks.db       # after close: rows, empty minutes, disk headroom
 python -m tradeloop.archive                          # move earlier days to data/archive/<date>/*.parquet
 ```
@@ -51,6 +52,7 @@ Schedule it for every trading day (crontab on the machine that stays on, times i
 
 ```cron
 5 9 * * 1-5   cd ~/tradeloop && .venv/bin/python -m tradeloop.recorder >> logs/recorder.log 2>&1
+6 9 * * 1-5   cd ~/tradeloop && .venv/bin/python -m tradeloop.chain_recorder >> logs/chain_recorder.log 2>&1
 50 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.health >> logs/health.log 2>&1
 55 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.archive >> logs/archive.log 2>&1
 ```
@@ -103,6 +105,23 @@ SEBI 0.01, stamp 0.20, GST 4.01; sell 38.83: brokerage 20, STT 12 (rounded to th
 exchange 2.73, SEBI 0.01, GST 4.09), net Rs 1,234.67. The rates match Groww's charges
 calculator to within 2 paise (it rounds on the round trip, we per fill).
 
+## Backtest
+
+```bash
+python -m tradeloop.backtest strategies/example_straddle.yaml --from 2025-01-01
+```
+
+Replays each expiry day minute by minute through the same engine paper and live trading
+will use: the strategy sees each minute's prices, IV and Greeks, orders fill from the next
+minute through the fill model, the ledger books charges, and anything open at the close
+settles at the official close. One row per expiry (gross, charges, net) goes to
+`data/backtests/`, plus a summary: net, win rate, worst day, max drawdown, by year.
+Expiries with known data problems are skipped (`data_quality.yaml`).
+
+A strategy is a class with `on_minute(ctx)` (`tradeloop/strategies/`); its parameters live
+in a config file in `strategies/`, identified by the file's git hash (`config_version`).
+`example_straddle` exists only to exercise the engine.
+
 ## First run checklist
 
 - Log shows `NIFTY: +62 contracts (expiry ...)` and the same for SENSEX within a minute of starting.
@@ -121,10 +140,12 @@ calculator to within 2 paise (it rounds on the round trip, we per fill).
 | --- | --- |
 | `tradeloop/core/` | Broker-neutral core: instrument IDs, types, `MarketData`/`Execution` interfaces, event bus |
 | `tradeloop/recorder.py`, `instruments.py`, `feed_parse.py`, `store.py`, `health.py` | Tick recorder (Groww) |
+| `tradeloop/chain_recorder.py` | Option-chain recorder: volume, OI, IV, Greeks once a minute (`data/chain.db`) |
 | `tradeloop/backfill.py`, `greeks.py`, `derive_greeks.py`, `check_history.py` | Historical candles, IV/Greeks, quality check |
 | `tradeloop/ledger.py`, `charges.py`, `lot_sizes.py`, `fill_model.py` | Ledger, dated charges and lot sizes, backtest fills |
+| `tradeloop/engine.py`, `sim_broker.py`, `backtest.py`, `strategies/` | Engine, backtest broker and runner, strategy code; configs in `strategies/` |
 | `CLAUDE.md` | Architecture rules and next steps, for Claude Code |
 
 ## Next
 
-A minimal engine running one expiry-day rule as a backtest on the downloaded history, then paper trading on the live feed. See `CLAUDE.md`.
+Find a first real expiry-day rule from the data (see the research method in `CLAUDE.md`), then paper trading on the live feed with the same engine. See `CLAUDE.md`.

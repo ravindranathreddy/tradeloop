@@ -1,0 +1,8 @@
+# EXAMPLE ONLY. Tests the engine end to end; not a trading idea, never to trade live.
+strategy_id: example_straddle
+strategy: timed_straddle
+underlyings: [NSE|NIFTY|IDX, BSE|SENSEX|IDX]
+side: BUY
+lots: 1
+entry_time: "09:20"
+exit_time: "15:00"

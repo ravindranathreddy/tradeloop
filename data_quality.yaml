@@ -1,0 +1,8 @@
+# Expiries backtests skip: problems check_history found that re-downloading can't fix.
+exclude:
+  NSE|NIFTY|IDX:
+    2026-07-07: Groww's contract list is incomplete, so no option candles
+    2026-09-29: index and options stop around 14:00 (halt or missing data)
+  BSE|SENSEX|IDX:
+    2023-10-20: a few near-the-money strikes settle 6-13 pts off the official close
+    2026-02-26: Groww's contract list is incomplete, so no option candles

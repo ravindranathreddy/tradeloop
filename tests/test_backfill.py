@@ -26,8 +26,10 @@ class FakeHistory:
         return [EXP, GHOST, date(2025, 7, 10)] if year == 2025 else []
 
     def contracts(self, index, expiry):
+        """Like Groww's: incomplete. 25100 CE exists but isn't listed."""
         fut = [InstrumentId("NSE", "NIFTY", Kind.FUT, expiry)] if expiry == EXP else []
-        return [opt(k, t, expiry) for k in range(24000, 26050, 50) for t in ("CE", "PE")] + fut
+        listed = [opt(k, t, expiry) for k in range(24000, 26050, 50) for t in ("CE", "PE")]
+        return [o for o in listed if o != opt(25100, "CE", expiry)] + fut
 
     def candles(self, iid, start, end, interval="1minute"):
         self.calls.append(iid)
@@ -47,8 +49,7 @@ class FakeHistory:
 # --- pure pieces -----------------------------------------------------------------
 
 def test_strikes_cover_the_week_range_plus_extra():
-    options = [opt(k, t) for k in range(24000, 26050, 50) for t in ("CE", "PE")]
-    picked = strikes_to_fetch(options, low=24990, high=25210, extra=2)
+    picked = strikes_to_fetch(NIFTY, EXP, low=24990, high=25210, extra=2, step=50)
     assert sorted({o.strike for o in picked}) == [24900, 24950, 25000, 25050, 25100, 25150, 25200, 25250, 25300]
     assert len(picked) == 18
 
@@ -104,6 +105,8 @@ def test_backfill_writes_files_marks_ghosts_and_skips_future(tmp_path):
     assert sorted({InstrumentId.parse(i).strike for i in df["instrument"] if i.endswith(("CE", "PE"))}) == \
         [24900, 24950, 25000, 25050, 25100, 25150, 25200, 25250, 25300]
     assert "NSE|NIFTY|2025-06-26|FUT" in set(df["instrument"])
+    assert "NSE|NIFTY|2025-06-26|25100|CE" in set(df["instrument"])     # unlisted, fetched from the grid
+    assert "1 contracts missing from Groww's list had data" in m[("NSE|NIFTY|IDX", "2025-06-26")]["note"]
     daily = pd.read_parquet(tmp_path / "candles_1d" / "NSE_NIFTY" / "2025-06-26.parquet")
     assert daily["close"].tolist() == [25190.0]                 # official close for settlement
     assert not (tmp_path / "candles_1m" / "NSE_NIFTY" / "2025-07-04.parquet").exists()

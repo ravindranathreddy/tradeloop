@@ -6,7 +6,12 @@
 For each expiry the broker lists: the index's candles for the expiry's final week
 (expiry - 6 days to expiry), then every option strike from the week's low to its
 high, plus `extra_strikes` either side, CE and PE, and the future if one expires
-that day. One call per contract covers the whole week. Output, per expiry:
+that day. One call per contract covers the whole week.
+
+Strikes come from the strike grid (STRIKE_STEP), not Groww's contract list: the list
+leaves out contracts that exist (e.g. NIFTY 15 Sep 2026 23500 CE, unlisted, 1,543
+candles), up to a third of strikes in 2026. A strike that doesn't exist returns no
+candles, which costs one call and nothing else. Output, per expiry:
 
     data/history/candles_1m/<exchange>_<index>/<expiry>.parquet   index, options, future
     data/history/candles_1d/<exchange>_<index>/<expiry>.parquet   index daily candles
@@ -33,6 +38,7 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+import math
 import os
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -42,7 +48,6 @@ import pandas as pd
 
 from tradeloop.core.ids import InstrumentId, Kind
 from tradeloop.core.market_calendar import default_calendar
-from tradeloop.instruments import strike_step
 
 IST = ZoneInfo("Asia/Kolkata")
 log = logging.getLogger("backfill")
@@ -52,6 +57,7 @@ MANIFEST_FIELDS = ["index", "expiry", "status", "contracts", "rows", "note", "fe
 DONE = {"ok", "ghost", "no_index_data"}
 INDICES = [InstrumentId.index("NSE", "NIFTY"), InstrumentId.index("BSE", "SENSEX")]
 FIRST_YEAR = 2020
+STRIKE_STEP = {"NIFTY": 50, "SENSEX": 100}      # weekly option strike grid near the money
 
 
 def week_window(expiry: date) -> tuple[datetime, datetime]:
@@ -59,17 +65,13 @@ def week_window(expiry: date) -> tuple[datetime, datetime]:
             datetime.combine(expiry, default_calendar().close_time(expiry), IST))
 
 
-def strikes_to_fetch(options: list[InstrumentId], low: float, high: float, extra: int) -> list[InstrumentId]:
-    """Options from the week's low to high, plus `extra` strikes either side."""
-    step = strike_step(o.strike for o in options)
-    lo, hi = low - extra * step, high + extra * step
-    picked = [o for o in options if lo <= o.strike <= hi]
-    return sorted(picked, key=lambda o: (o.strike, o.kind.value))
-
-
-def nearest(options: list[InstrumentId], price: float, kind: Kind) -> InstrumentId | None:
-    same = [o for o in options if o.kind is kind]
-    return min(same, key=lambda o: abs(o.strike - price)) if same else None
+def strikes_to_fetch(index: InstrumentId, expiry: date, low: float, high: float, extra: int,
+                     step: float) -> list[InstrumentId]:
+    """CE and PE on the strike grid from the week's low to high, plus `extra` strikes either side."""
+    first = math.ceil((low - extra * step) / step)
+    last = math.floor((high + extra * step) / step)
+    return [InstrumentId.option(index.exchange, index.underlying, expiry, float(k * step), kind)
+            for k in range(first, last + 1) for kind in ("CE", "PE")]
 
 
 def _traded(rows: list[tuple]) -> bool:
@@ -94,17 +96,21 @@ def backfill_expiry(hist, index: InstrumentId, expiry: date, out_dir: Path, extr
 
     after_open = [r for r in on_expiry_day if r[1] >= expiry_ms + (9 * 60 + 15) * 60_000] or on_expiry_day
     open_price = after_open[0][2]                       # 09:15, not the pre-open auction
+    step = STRIKE_STEP[index.underlying]
+    atm_strike = round(open_price / step) * step
     fetched: dict[InstrumentId, list[tuple]] = {}
-    for kind in (Kind.CE, Kind.PE):                     # cheap ghost check before the full fetch
-        atm = nearest(options, open_price, kind)
-        if atm is not None:
-            fetched[atm] = hist.candles(atm, start, end)
+    for kind in ("CE", "PE"):                           # cheap ghost check before the full fetch
+        atm = InstrumentId.option(index.exchange, index.underlying, expiry, float(atm_strike), kind)
+        fetched[atm] = hist.candles(atm, start, end)
     if not any(_traded(rows) for rows in fetched.values()):
         return {**row, "status": "ghost", "note": "ATM call and put never traded"}
 
-    low = min(r[4] for r in index_rows)
-    high = max(r[3] for r in index_rows)
-    wanted = strikes_to_fetch(options, low, high, extra) + futures
+    after_open_week = [r for r in index_rows if (r[1] - expiry_ms) % 86_400_000 >= (9 * 60 + 15) * 60_000]
+    low = min(r[4] for r in after_open_week or index_rows)   # pre-open prints can be far off
+    high = max(r[3] for r in after_open_week or index_rows)
+    grid = strikes_to_fetch(index, expiry, low, high, extra, step)
+    listed = set(options)
+    wanted = grid + futures
     for o in wanted:
         if o not in fetched:
             fetched[o] = hist.candles(o, start, end)
@@ -114,9 +120,13 @@ def backfill_expiry(hist, index: InstrumentId, expiry: date, out_dir: Path, extr
     _write(daily, out_dir / "candles_1d" / name / f"{expiry.isoformat()}.parquet")
     df = _write(index_rows + [r for o in wanted for r in fetched.get(o, [])],
                 out_dir / "candles_1m" / name / f"{expiry.isoformat()}.parquet")
-    no_trades = sum(1 for o in wanted if not _traded(fetched.get(o, [])))
-    note = f"{no_trades} contracts never traded" if no_trades else ""
-    return {**row, "status": "ok", "contracts": len(wanted), "rows": len(df), "note": note}
+    with_data = [o for o in wanted if fetched.get(o)]
+    unlisted = sum(1 for o in with_data if o.kind.is_option and o not in listed)
+    no_data = len(wanted) - len(with_data)
+    notes = [f"{no_data} grid contracts have no candles"] if no_data else []
+    if unlisted:
+        notes.append(f"{unlisted} contracts missing from Groww's list had data")
+    return {**row, "status": "ok", "contracts": len(with_data), "rows": len(df), "note": "; ".join(notes)}
 
 
 def clean(df: pd.DataFrame) -> pd.DataFrame:

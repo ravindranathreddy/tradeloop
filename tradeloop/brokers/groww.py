@@ -82,8 +82,11 @@ def _ms(ts) -> int:
     return int(ts * 1000) if ts < 1e12 else int(ts)  # some payloads carry seconds
 
 
-def _num(v) -> float | None:
-    return None if v is None else float(v)
+def _present(v) -> float | None:
+    """The SDK prints every proto field, so a field Groww didn't send arrives as 0. The live
+    LTP stream rarely fills volume or OI (seen 27 Oct 2026: volume never, OI on <1% of
+    updates), so 0 means unknown here, not zero. Volume and OI come from candles instead."""
+    return None if v is None or float(v) == 0 else float(v)
 
 
 def _walk(root):
@@ -104,7 +107,7 @@ def ltp_ticks(snapshot, ids: dict[Key, InstrumentId], recv_ms: int):
         iid = ids.get(key)
         if iid is not None and d.get("ltp") is not None:
             yield Tick(iid, _ms(d["tsInMillis"]), ltp=float(d["ltp"]), recv_ms=recv_ms,
-                       volume=_num(d.get("volume")), oi=_num(d.get("openInterest")))
+                       volume=_present(d.get("volume")), oi=_present(d.get("openInterest")))
 
 
 def index_ticks(snapshot, ids: dict[Key, InstrumentId], recv_ms: int):
