@@ -32,6 +32,9 @@ data/history/expiries.csv; that file is the historical expiry list for backtests
 
 Resumable: expiries already marked ok, ghost or no_index_data are skipped; failed
 ones are retried on the next run. --refetch downloads a range again regardless.
+
+--wings N adds N more strikes beyond each file's range on the out-of-the-money sides
+(puts below, calls above): the protective legs of spreads. Tracked in wings.csv.
 """
 from __future__ import annotations
 
@@ -196,6 +199,49 @@ def backfill(hist, indices: list[InstrumentId], start: date, end: date, out_dir:
     return manifest
 
 
+def add_wings(hist, index: InstrumentId, expiry: date, out_dir: Path, n: int) -> int:
+    """Add `n` more strikes beyond an expiry file's range on the out-of-the-money sides (puts
+    below the lowest strike, calls above the highest), for protective legs of spreads.
+    Returns the number of contracts that had candles."""
+    name = f"{index.exchange}_{index.underlying}"
+    path = out_dir / "candles_1m" / name / f"{expiry.isoformat()}.parquet"
+    df = pd.read_parquet(path)
+    strikes = pd.to_numeric(df["instrument"].str.split("|").str[3], errors="coerce").dropna()
+    step = STRIKE_STEP[index.underlying]
+    lo, hi = strikes.min(), strikes.max()
+    start, end = week_window(expiry)
+    wanted = [InstrumentId.option(index.exchange, index.underlying, expiry, float(lo - i * step), "PE")
+              for i in range(1, n + 1) if lo - i * step > 0]
+    wanted += [InstrumentId.option(index.exchange, index.underlying, expiry, float(hi + i * step), "CE")
+               for i in range(1, n + 1)]
+    fetched = {o: hist.candles(o, start, end) for o in wanted}
+    new_rows = [r for rows in fetched.values() for r in rows]
+    if new_rows:
+        _write(list(df.itertuples(index=False, name=None)) + new_rows, path)
+    return sum(1 for rows in fetched.values() if rows)
+
+
+def wings(hist, indices: list[InstrumentId], start: date, end: date, out_dir: Path, n: int) -> None:
+    """add_wings for every ok expiry in [start, end]; resumable via data/history/wings.csv."""
+    done_path = out_dir / "wings.csv"
+    done = set(pd.read_csv(done_path)["key"]) if done_path.exists() else set()
+    manifest = read_manifest(out_dir / "expiries.csv")
+    for (index_s, exp_s), row in sorted(manifest.items()):
+        key = f"{index_s} {exp_s} {n}"
+        if row.get("status") != "ok" or key in done or InstrumentId.parse(index_s) not in indices:
+            continue
+        if not (start <= date.fromisoformat(exp_s) <= end):
+            continue
+        try:
+            got = add_wings(hist, InstrumentId.parse(index_s), date.fromisoformat(exp_s), out_dir, n)
+        except Exception:
+            log.exception("%s %s wings failed", index_s, exp_s)
+            continue
+        done.add(key)
+        pd.DataFrame({"key": sorted(done)}).to_csv(done_path, index=False)
+        log.info("%s %s: wings +%d contracts with candles", index_s, exp_s, got)
+
+
 def main():
     from tradeloop.auth import login
     from tradeloop.brokers.groww import GrowwHistory
@@ -207,11 +253,16 @@ def main():
     p.add_argument("--extra-strikes", type=int, default=10)
     p.add_argument("--out", default="data/history")
     p.add_argument("--refetch", action="store_true", help="download finished expiries in the range again")
+    p.add_argument("--wings", type=int, help="instead: add this many far strikes beyond each file's range")
     a = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     indices = [InstrumentId.parse(i) for i in a.index] if a.index else INDICES
     hist = GrowwHistory(login())
+    if a.wings:
+        wings(hist, indices, date.fromisoformat(a.start), date.fromisoformat(a.end), Path(a.out), a.wings)
+        log.info("Wings done, %d API calls", hist.calls)
+        return
     manifest = backfill(hist, indices, date.fromisoformat(a.start), date.fromisoformat(a.end),
                         Path(a.out), a.extra_strikes, refetch=a.refetch)
     counts: dict[str, int] = {}

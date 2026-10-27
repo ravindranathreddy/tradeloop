@@ -3,7 +3,7 @@ from datetime import date, datetime, time, timedelta
 import pandas as pd
 import pytest
 
-from tradeloop.backfill import IST, backfill, clean, read_manifest, strikes_to_fetch, week_window
+from tradeloop.backfill import IST, add_wings, backfill, clean, read_manifest, strikes_to_fetch, week_window
 from tradeloop.brokers.groww import GrowwHistory, candle_rows, derivative_from_groww_symbol, groww_symbol
 from tradeloop.core.ids import InstrumentId, Kind
 
@@ -180,3 +180,13 @@ def test_history_gives_up_on_other_errors():
 
     with pytest.raises(Exception, match="forbidden"):
         GrowwHistory(Broken(), sleep=lambda s: None).expiries(NIFTY, 2025)
+
+
+def test_wings_add_far_puts_below_and_calls_above(tmp_path):
+    backfill(FakeHistory(), [NIFTY], date(2025, 1, 1), date(2025, 12, 31), tmp_path, extra=2, today=date(2025, 7, 8))
+    path = tmp_path / "candles_1m" / "NSE_NIFTY" / "2025-06-26.parquet"
+    before = set(pd.read_parquet(path)["instrument"])
+    got = add_wings(FakeHistory(), NIFTY, EXP, tmp_path, 3)
+    added = set(pd.read_parquet(path)["instrument"]) - before
+    assert got == 6
+    assert added == {str(opt(k, "PE")) for k in (24850, 24800, 24750)} | {str(opt(k, "CE")) for k in (25350, 25400, 25450)}

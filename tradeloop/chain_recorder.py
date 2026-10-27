@@ -10,7 +10,8 @@ volume, OI, IV and Greeks (Groww's, in 0.3 s).
 Groww's Greeks are a cross-check and a record, not what strategies use: strategies use
 our own (tradeloop.greeks), so live and backtest see the same definitions. Known
 difference: Groww's theta looks capped at the option's price; ours is the instantaneous
-rate per calendar day, which on expiry day exceeds the premium. Groww's iv is a percent.
+rate per calendar day, which on expiry day exceeds the premium. Groww's iv is a percent;
+oi is in contracts (lots), not units: Sensibull's OI charts show units (oi x lot size).
 
 The chain has no timestamp, so ts_ms is when we received it. Stops at the F&O close.
 """

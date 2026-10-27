@@ -1,0 +1,11 @@
+# CANDIDATE from study 5 (research/LOG.md). Not approved; backtest and research only.
+# Sell a put ~2.5% below NIFTY the day before expiry, buy one ~4.5% below as protection,
+# hold to expiry. Maximum loss is fixed at entry.
+strategy_id: put_credit_spread
+strategy: put_credit_spread
+underlyings: [NSE|NIFTY|IDX]
+lots: 1
+entry_time: "09:20"
+enter_within_days: 2      # first trading day with 1-2 calendar days left (Monday for Tuesday expiry)
+short_otm_pct: 2.5
+long_otm_pct: 4.5
