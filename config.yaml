@@ -8,9 +8,17 @@ record_depth: true       # top-5 bid/ask; needed later for realistic paper fills
 underlyings:
   - name: NIFTY          # index IDs, e.g. NSE|NIFTY|IDX; feed tokens live in brokers/groww.py
     exchange: NSE
-    strikes_each_side: 15
+    strikes_each_side: 25  # ~5.5% each side: covers the put credit spread's protective put
     recenter_points: 200 # add strikes if spot moves this far from the last selection
   - name: SENSEX
     exchange: BSE
-    strikes_each_side: 15
+    strikes_each_side: 36  # 100-pt strikes: ~5% each side, covers the protective put
     recenter_points: 600
+
+# Paper trading (step 7): these strategies trade on the live feed against the recorded
+# order book. No real orders. See tradeloop/paper.py.
+paper:
+  - strategies/put_credit_spread.yaml
+  - strategies/put_credit_spread_sensex.yaml   # lower-confidence trial, see its memo
+paper_db: data/paper.db
+paper_max_lots: 1

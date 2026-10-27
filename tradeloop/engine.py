@@ -82,8 +82,9 @@ class Context:
 
     def order(self, instrument: InstrumentId, side: Side, lots: int, order_type: OrderType = OrderType.MARKET,
               price: float | None = None, trigger: float | None = None) -> Order:
-        """Build and send an order; quantity is lots x the contract's lot size."""
-        order = Order(instrument, side, lots * self.lot_size(instrument), order_type, Product.INTRADAY,
+        """Build and send an order; quantity is lots x the contract's lot size. Carry product (NRML):
+        positions may be held overnight, and brokers square off intraday (MIS) ones at ~15:20."""
+        order = Order(instrument, side, lots * self.lot_size(instrument), order_type, Product.CARRY,
                       self._engine.strategy_id, self._engine.config_version, price, trigger)
         self._engine.execution.place(order)
         return order

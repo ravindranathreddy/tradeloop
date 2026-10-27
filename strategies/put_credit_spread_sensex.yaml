@@ -1,0 +1,12 @@
+# PAPER TRIAL (lower confidence than NIFTY): same rule on SENSEX. SENSEX history starts
+# Aug 2023, so only ~1.5 development years (56 trades); held out 2025-2026 strong (90
+# trades, +23 points/trade) but in a calm period. Not approved for real money.
+# Sell a put ~2.5% below SENSEX 1-2 days before expiry, buy one ~4.5% below, hold to expiry.
+strategy_id: put_credit_spread_sensex
+strategy: put_credit_spread
+underlyings: [BSE|SENSEX|IDX]
+lots: 1
+entry_time: "09:20"
+enter_within_days: 2      # first trading day with 1-2 calendar days left (Tuesday for a Thursday expiry)
+short_otm_pct: 2.5
+long_otm_pct: 4.5

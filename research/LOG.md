@@ -152,6 +152,44 @@ Development result for reference: 260 trades, +3.36 points/trade, 90% wins.
 - INCONCLUSIVE: anything between; then paper trading is the next unseen test.
 Secondary (reported, not decisive): SENSEX over the same held-out period.
 
+## Held-out result: put credit spread, 2025-2026 (27 Oct 2026)
+
+Run once with the frozen config (commit 1e30e89, config 522ebac1e403).
+
+- NIFTY: 87 trades, +6.67 points/trade after charges (95% range +4.10..+9.25), 86% wins,
+  worst trade -0.4 points (charges only), total Rs 40,988 (1 lot). 2025 +7.03, 2026 +6.15
+  points/trade. PASS against the pre-registered rule (>= +1.7 and >= 80% wins).
+- SENSEX (secondary): 90 trades, +23.3 points/trade (SENSEX points are ~3.3x NIFTY's),
+  94% wins, worst -0.6 points, total Rs 41,490.
+- Caution: a favourable period. NIFTY fell more than 2% during the hold in only 2 of 87
+  weeks (development years: 21 of 260, 8%), and both of those falls happened mostly
+  before the 09:20 entry, so the spread was sold after the drop at richer premiums (Apr
+  2025 tariff crash: +6,263). The capped-loss behaviour was not tested by this period;
+  2020-2024 is the evidence for that (worst -13,489 per lot).
+- 7 weeks had no trade: holiday-shifted expiries left no day with 1-2 days to go.
+
+Conclusion: passes the held-out test. Expect long-run results nearer the development
+average (+3.4 points/trade) than this calm period's +6.7. Next: a plain-language memo
+for Ranga, then paper trading (needs step 7: paper broker on the live feed).
+
+## Robustness: put credit spread, development years (27 Oct 2026)
+
+Declared before running (base: 2 days before, 2.5% below, protection 2% further, 09:20):
+change one setting at a time. Points per trade after charges.
+
+| change | trades | avg | 95% range | wins | years + |
+|---|---|---|---|---|---|
+| base (for reference) | 260 | +3.36 | +0.58..+6.18 (bootstrap 90%) | 90% | 5/5 |
+| entry 10:00 | 257 | +4.11 | +0.98..+7.25 | 90% | 5/5 |
+| entry 11:00 | 253 | +2.53 | -1.05..+6.12 | 89% | 5/5 |
+| protection 1.5% further | 261 | +2.39 | -0.95..+5.72 | 89% | 5/5 |
+| protection 3% further | 256 | +4.81 | +0.52..+9.10 | 93% | 5/5 |
+| SENSEX (Aug 2023-2024 only) | 56 | +3.72 SENSEX pts | -16.8..+24.2 | 80% | 1/2 |
+
+Every NIFTY change stays positive in every year; size varies (+2.4 to +4.8). SENSEX's
+development sample is too short to say much (its held-out result was strong). Supports
+the effect being real rather than one lucky setting. Base config unchanged.
+
 ## Open ideas
 
 - Capped-risk selling (iron condor) vs straddle: what does capping the tail cost?

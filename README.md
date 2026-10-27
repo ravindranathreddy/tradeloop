@@ -55,6 +55,7 @@ Schedule it for every trading day (crontab on the machine that stays on, times i
 6 9 * * 1-5   cd ~/tradeloop && .venv/bin/python -m tradeloop.chain_recorder >> logs/chain_recorder.log 2>&1
 50 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.health >> logs/health.log 2>&1
 55 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.archive >> logs/archive.log 2>&1
+0 16 * * 1-5  cd ~/tradeloop && .venv/bin/python -m tradeloop.paper settle >> logs/paper.log 2>&1
 ```
 
 Create `logs/` first. On weekends and exchange holidays (from `market_calendar.yaml`) the
@@ -125,6 +126,21 @@ A strategy is a class with `on_minute(ctx)` (`tradeloop/strategies/`); its param
 in a config file in `strategies/`, identified by the file's git hash (`config_version`).
 `example_straddle` exists only to exercise the engine.
 
+## Paper trading
+
+Strategies listed under `paper:` in config.yaml trade on the live feed inside the recorder:
+same engine and strategy code as the backtest, orders through the risk gate (max lots, no
+orders on stale data) to a paper broker that fills against the live order book. No real
+orders. Fills, orders and strategy state go to `data/paper.db`; positions held overnight
+survive the nightly restart. After the close on expiry days, settle at the official close:
+
+```bash
+python -m tradeloop.paper settle     # 16:00 on trading days (cron above); no-op if nothing expires
+python -m tradeloop.paper report     # P&L, open positions, recent fills
+```
+
+Memo and drop rules for each paper strategy: `research/memos/`.
+
 ## First run checklist
 
 - Log shows `NIFTY: +62 contracts (expiry ...)` and the same for SENSEX within a minute of starting.
@@ -147,8 +163,10 @@ in a config file in `strategies/`, identified by the file's git hash (`config_ve
 | `tradeloop/backfill.py`, `greeks.py`, `derive_greeks.py`, `check_history.py` | Historical candles, IV/Greeks, quality check |
 | `tradeloop/ledger.py`, `charges.py`, `lot_sizes.py`, `fill_model.py` | Ledger, dated charges and lot sizes, backtest fills |
 | `tradeloop/engine.py`, `sim_broker.py`, `backtest.py`, `strategies/` | Engine, backtest broker and runner, strategy code; configs in `strategies/` |
+| `tradeloop/paper.py`, `paper_broker.py`, `paper_store.py`, `risk.py` | Paper trading on the live feed, risk gate |
+| `research/` | Studies, research log, strategy backlog, memos |
 | `CLAUDE.md` | Architecture rules and next steps, for Claude Code |
 
 ## Next
 
-Find a first real expiry-day rule from the data (see the research method in `CLAUDE.md`), then paper trading on the live feed with the same engine. See `CLAUDE.md`.
+Paper trade the put credit spread for 30 trades (from 2 Nov 2026), review, then decide on real money. Meanwhile, research the next candidates in `research/STRATEGIES.md`. See `CLAUDE.md`.

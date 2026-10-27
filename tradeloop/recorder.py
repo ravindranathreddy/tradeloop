@@ -146,6 +146,32 @@ def build(cfg: dict, api, today: date, **adapter_kw):
     return Recorder(cfg, md, Store(cfg["db_path"]), today), md
 
 
+def paper_traders(cfg: dict, rec: Recorder, md: MarketData) -> list:
+    """Paper strategies from cfg["paper"], listening to the recorder's ticks. A paper setup
+    problem is logged and skipped: it must never stop the recording."""
+    if not cfg.get("paper"):
+        return []
+    from tradeloop.lot_sizes import default_lot_sizes
+    from tradeloop.paper import PaperTrader
+    from tradeloop.paper_store import PaperStore
+
+    listed = {c.instrument: c.lot_size for c in md.instruments()}
+    table = default_lot_sizes()
+    lot_size = lambda i: listed.get(i) or table.lot_size(i)       # broker's lot first
+    store = PaperStore(cfg.get("paper_db", "data/paper.db"))
+    traders = []
+    for path in cfg["paper"]:
+        try:
+            t = PaperTrader(Path(path), store, max_lots=int(cfg.get("paper_max_lots", 1)), lot_size=lot_size)
+        except Exception:
+            log.exception("Paper strategy %s not started", path)
+            continue
+        rec.bus.subscribe(Topic.TICK, t.on_tick)
+        traders.append(t)
+    log.info("Paper trading: %s", ", ".join(t.strategy_id for t in traders) or "none")
+    return traders
+
+
 def main():
     from tradeloop.auth import login
 
@@ -173,6 +199,7 @@ def main():
     rec, md = build(cfg, login(), today)
     for problem in calendar_problems(cal, md.instruments(), cfg["underlyings"]):
         log.warning("Calendar check: %s", problem)
+    paper_traders(cfg, rec, md)
 
     def handle(sig, _frame):
         log.info("Signal %s, stopping", sig)

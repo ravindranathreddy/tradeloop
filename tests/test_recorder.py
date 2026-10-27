@@ -103,3 +103,16 @@ def test_health_disk_line(tmp_path):
     (tmp_path / "ticks.db-wal").write_bytes(b"x" * 1000)
     line = disk_line(tmp_path / "ticks.db", days=2)
     assert "used by 2 day(s)" in line and "more days at this rate" in line
+
+
+def test_paper_traders_listen_to_the_recorders_ticks_and_a_bad_config_is_skipped(tmp_path):
+    from tradeloop.recorder import paper_traders
+    md, store, rec = make(tmp_path)
+    good = tmp_path / "good.yaml"
+    good.write_text("strategy_id: p\nstrategy: put_credit_spread\nunderlyings: [NSE|NIFTY|IDX]\nlots: 1\n"
+                    "entry_time: '09:20'\nenter_within_days: 2\nshort_otm_pct: 2.5\nlong_otm_pct: 4.5\n")
+    cfg = {**CFG, "paper": [str(tmp_path / "missing.yaml"), str(good)], "paper_db": str(tmp_path / "paper.db")}
+    traders = paper_traders(cfg, rec, md)
+    assert [t.strategy_id for t in traders] == ["p"]
+    md.push(Tick(NIFTY, 1, ltp=25000.0))
+    assert traders[0].index_price == 25000.0 and store.count("ltp") >= 0     # recording unaffected

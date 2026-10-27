@@ -130,8 +130,10 @@ check, not the main evidence.
    rule (`strategies/example_straddle.yaml`, not a trading idea). Replays every trading
    day (not only expiry day), nearest weekly expiry's contracts, overnight holds allowed. Next: Ranga's first real
    rule, found and tested by the research method below.
-7. Paper trading on the live feed with the same engine: paper broker fills at recorded
-   bid/ask, risk layer (basic limits, stale-data check). 4+ weeks before real money.
+7. Paper trading — built (`paper.py`, `paper_broker.py`, `paper_store.py`, `risk.py`), runs
+   inside the recorder. First strategy: put credit spread (passed its held-out test; memo
+   and drop rules in research/memos/put_credit_spread.md). First paper trade Mon 2 Nov
+   2026. 30 trades / 4+ weeks, then Ranga's review before any real money.
 
 ## Research method (how rules are found)
 

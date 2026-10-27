@@ -45,6 +45,17 @@ class CreditSpread:
         self.short: InstrumentId | None = None
         self.day: date | None = None
 
+    def state_dict(self) -> dict:
+        """What a restart needs (paper/live processes stop every evening)."""
+        return {"state": self.state, "long": str(self.long) if self.long else None,
+                "short": str(self.short) if self.short else None, "day": self.day.isoformat() if self.day else None}
+
+    def restore(self, s: dict) -> None:
+        self.state = s["state"]
+        self.long = InstrumentId.parse(s["long"]) if s["long"] else None
+        self.short = InstrumentId.parse(s["short"]) if s["short"] else None
+        self.day = date.fromisoformat(s["day"]) if s["day"] else None
+
     def on_minute(self, ctx) -> None:
         if self.state == "waiting":
             if 0 < ctx.days_to_expiry <= self.within and ctx.time >= self.entry:
@@ -113,3 +124,10 @@ class IronCondor:
     def on_minute(self, ctx) -> None:
         for side in self.sides:
             side.on_minute(ctx)
+
+    def state_dict(self) -> dict:
+        return {"sides": [s.state_dict() for s in self.sides]}
+
+    def restore(self, s: dict) -> None:
+        for side, st in zip(self.sides, s["sides"]):
+            side.restore(st)
