@@ -9,6 +9,7 @@ every weekday as a trading day is worse than a loud error.
 """
 from __future__ import annotations
 
+import functools
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -44,9 +45,11 @@ class ExpiryRule:
 class MarketCalendar:
     def __init__(self, holidays: dict[int, dict[date, str]], session_times: dict[str, time],
                  expiry_rules: dict[InstrumentId, list[ExpiryRule]],
-                 special_sessions: dict[date, str] | None = None):
+                 special_sessions: dict[date, str] | None = None,
+                 session_changes: dict[date, dict[str, time]] | None = None):
         self.holidays = holidays
         self.session_times = session_times
+        self.session_changes = sorted((session_changes or {}).items())
         self.expiry_rules = {k: sorted(v, key=lambda r: r.start) for k, v in expiry_rules.items()}
         self.special_sessions = special_sessions or {}
 
@@ -56,11 +59,12 @@ class MarketCalendar:
             raw = yaml.safe_load(f)
         holidays = {int(y): {_date(d): str(name) for d, name in days.items()}
                     for y, days in (raw.get("holidays") or {}).items()}
-        times = {k: datetime.strptime(v, "%H:%M").time() for k, v in raw["session"].items()}
+        times = _times(raw["session"])
+        changes = {_date(d): _times(t) for d, t in (raw.get("session_changes") or {}).items()}
         rules = {InstrumentId.parse(k): [ExpiryRule(_date(r["from"]), WEEKDAYS[r["weekday"]]) for r in v]
                  for k, v in (raw.get("expiry_rules") or {}).items()}
         special = {_date(d): str(n) for d, n in (raw.get("special_sessions") or {}).items()}
-        return cls(holidays, times, rules, special)
+        return cls(holidays, times, rules, special, changes)
 
     # --- trading days ----------------------------------------------------------
 
@@ -103,10 +107,22 @@ class MarketCalendar:
 
     # --- sessions ----------------------------------------------------------------
 
+    def session_times_on(self, d: date) -> dict[str, time]:
+        """Session times in force on `d`. Needs no holiday list, so works for any year."""
+        times = dict(self.session_times)
+        for start, changed in self.session_changes:
+            if start <= d:
+                times.update(changed)
+        return times
+
+    def close_time(self, d: date) -> time:
+        return self.session_times_on(d)["close"]
+
     def session(self, d: date) -> Session | None:
         if not self.is_trading_day(d):
             return None
-        at = lambda key: datetime.combine(d, self.session_times[key], IST)
+        times = self.session_times_on(d)
+        at = lambda key: datetime.combine(d, times[key], IST)
         return Session(at("pre_open"), at("open"), at("close"))
 
     def is_open(self, when: datetime) -> bool:
@@ -186,3 +202,13 @@ class MarketCalendar:
 
 def _date(v) -> date:
     return v if isinstance(v, date) else date.fromisoformat(str(v))
+
+
+def _times(raw: dict) -> dict[str, time]:
+    return {k: datetime.strptime(v, "%H:%M").time() for k, v in raw.items()}
+
+
+@functools.cache
+def default_calendar() -> MarketCalendar:
+    """The repo's market_calendar.yaml, loaded once."""
+    return MarketCalendar.load()

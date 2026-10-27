@@ -20,6 +20,8 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable, Iterable
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from growwapi import GrowwAPI, GrowwFeed
@@ -28,6 +30,7 @@ from tradeloop.core.ids import InstrumentId, Kind
 from tradeloop.core.types import Contract, Level, Tick
 
 log = logging.getLogger("groww")
+IST = ZoneInfo("Asia/Kolkata")
 
 INSTRUMENT_CSV_URL = "https://growwapi-assets.groww.in/instruments/instrument.csv"
 MAX_BACKOFF = 300.0
@@ -256,3 +259,114 @@ def _close_feed(feed) -> None:
         asyncio.run_coroutine_threadsafe(client._socket.close(), client._loop)
     except Exception:
         log.debug("Could not close old feed", exc_info=True)
+
+
+# --- history (Groww's backtesting API) ------------------------------------------------
+
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+# groww_symbol for index candles in the backtesting API.
+HISTORY_INDEX_SYMBOLS: dict[InstrumentId, str] = {
+    InstrumentId.index("NSE", "NIFTY"): "NSE-NIFTY",
+    InstrumentId.index("BSE", "SENSEX"): "BSE-SENSEX",
+}
+
+
+def _groww_date(s: str) -> date:
+    return date(2000 + int(s[5:7]), MONTHS.index(s[2:5]) + 1, int(s[:2]))
+
+
+def derivative_from_groww_symbol(symbol: str) -> InstrumentId:
+    """'NSE-NIFTY-26Jun25-25000-CE' -> NSE|NIFTY|2025-06-26|25000|CE;
+    'NSE-NIFTY-26Jun25-FUT' -> NSE|NIFTY|2025-06-26|FUT."""
+    parts = symbol.split("-")
+    if len(parts) == 4 and parts[3] == "FUT":
+        exchange, underlying, expiry, _ = parts
+        return InstrumentId(exchange, underlying, Kind.FUT, _groww_date(expiry))
+    exchange, underlying, expiry, strike, kind = parts
+    return InstrumentId.option(exchange, underlying, _groww_date(expiry), float(strike), kind)
+
+
+def groww_symbol(iid: InstrumentId) -> str:
+    if iid.kind is Kind.IDX:
+        return HISTORY_INDEX_SYMBOLS[iid]
+    e = iid.expiry
+    if iid.kind is Kind.FUT:
+        return f"{iid.exchange}-{iid.underlying}-{e.day:02d}{MONTHS[e.month - 1]}{e.year % 100:02d}-FUT"
+    strike = int(iid.strike) if float(iid.strike).is_integer() else iid.strike
+    return f"{iid.exchange}-{iid.underlying}-{e.day:02d}{MONTHS[e.month - 1]}{e.year % 100:02d}-{strike}-{iid.kind.value}"
+
+
+def candle_rows(iid: InstrumentId, candles) -> list[tuple]:
+    """Groww candles [ts, o, h, l, c, volume, oi] (ts in IST) -> rows keyed by neutral ID.
+    Volume and OI stay None where Groww has none (indices; OI between exchange updates)."""
+    rows = []
+    for ts, o, h, l, c, *rest in candles or []:      # daily index candles can omit volume/OI
+        vol, oi = (rest + [None, None])[:2]
+        t = datetime.fromisoformat(ts).replace(tzinfo=IST)
+        rows.append((str(iid), int(t.timestamp() * 1000), o, h, l, c, vol, oi))
+    return rows
+
+
+class GrowwHistory:
+    """Groww's backtesting API with neutral IDs in and out, throttled and retried.
+
+    Groww doesn't document a limit for these calls; ~3.6 calls/s hit one, so we
+    space calls `min_interval` apart. Rate limits and network blips (resets,
+    timeouts) are retried with backoff; anything else is raised at once. The SDK
+    has no timeout by default, so a hung connection would stall forever: we pass one.
+    """
+
+    def __init__(self, api: GrowwAPI, *, min_interval: float = 0.5, retries: int = 6, timeout: float = 30,
+                 sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.monotonic):
+        self._api, self._min_interval, self._retries, self._timeout = api, min_interval, retries, timeout
+        self._sleep, self._clock = sleep, clock
+        self._last_call = float("-inf")
+        self.calls = 0
+
+    def expiries(self, index: InstrumentId, year: int, month: int | None = None) -> list[date]:
+        r = self._call(self._api.get_expiries, index.exchange, index.underlying, year=year, month=month)
+        return [date.fromisoformat(d) for d in r.get("expiries") or []]
+
+    def contracts(self, index: InstrumentId, expiry: date) -> list[InstrumentId]:
+        r = self._call(self._api.get_contracts, index.exchange, index.underlying, expiry.isoformat())
+        out = []
+        for s in r.get("contracts") or []:
+            try:
+                out.append(derivative_from_groww_symbol(s))
+            except (ValueError, IndexError):
+                log.warning("Skipping unrecognised contract symbol %s", s)
+        return out
+
+    def candles(self, iid: InstrumentId, start: datetime, end: datetime, interval: str = "1minute") -> list[tuple]:
+        """interval: "1minute" or "1day". An index's daily close is the official close,
+        which expiring options settle on (not the last traded value)."""
+        segment = "CASH" if iid.kind is Kind.IDX else "FNO"
+        r = self._call(self._api.get_historical_candles, iid.exchange, segment, groww_symbol(iid),
+                       start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S"), interval)
+        return candle_rows(iid, r.get("candles"))
+
+    def _call(self, fn, *args, **kw):
+        delay = 2.0
+        for attempt in range(self._retries + 1):
+            wait = self._last_call + self._min_interval - self._clock()
+            if wait > 0:
+                self._sleep(wait)
+            self._last_call = self._clock()
+            self.calls += 1
+            try:
+                return fn(*args, timeout=self._timeout, **kw)
+            except Exception as e:
+                if not _transient(e) or attempt == self._retries:
+                    raise
+                log.info("%s; retrying in %.0fs", str(e)[:80], delay)
+                self._sleep(delay)
+                delay = min(delay * 2, 60.0)
+
+
+def _transient(e: Exception) -> bool:
+    """Worth retrying: rate limits and network blips, not bad requests or auth errors."""
+    import requests                       # the SDK's HTTP client
+    if isinstance(e, (ConnectionError, TimeoutError, requests.ConnectionError, requests.Timeout)):
+        return True
+    return "rate limit" in str(e).lower()

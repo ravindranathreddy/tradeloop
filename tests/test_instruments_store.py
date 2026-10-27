@@ -17,7 +17,7 @@ def fake_contracts():
 
 
 def test_strike_step():
-    assert strike_step(fake_contracts()[:40]) == 50
+    assert strike_step(c.instrument.strike for c in fake_contracts()[:40]) == 50
 
 
 def test_pick_nearest_expiry_around_atm():

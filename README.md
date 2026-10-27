@@ -38,7 +38,7 @@ No static IP is needed for recording; it's only required later for placing order
 ## Run
 
 ```bash
-python -m tradeloop.recorder --config config.yaml   # runs until 15:31 IST, then exits
+python -m tradeloop.recorder --config config.yaml   # runs until 15:41 IST (F&O closes 15:40), then exits
 python -m tradeloop.health --db data/ticks.db       # after close: rows, empty minutes, disk headroom
 python -m tradeloop.archive                          # move earlier days to data/archive/<date>/*.parquet
 ```
@@ -51,13 +51,38 @@ Schedule it for every trading day (crontab on the machine that stays on, times i
 
 ```cron
 5 9 * * 1-5   cd ~/tradeloop && .venv/bin/python -m tradeloop.recorder >> logs/recorder.log 2>&1
-40 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.health >> logs/health.log 2>&1
-45 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.archive >> logs/archive.log 2>&1
+50 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.health >> logs/health.log 2>&1
+55 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.archive >> logs/archive.log 2>&1
 ```
 
 Create `logs/` first. On weekends and exchange holidays (from `market_calendar.yaml`) the
 recorder logs the reason and exits. Update that file each December when NSE publishes the
 next year's holiday list; asking about a year that isn't there raises an error on purpose.
+
+## Historical data (for backtests)
+
+```bash
+python -m tradeloop.backfill                 # every past NIFTY/SENSEX weekly expiry Groww has (~6 h first time)
+python -m tradeloop.derive_greeks            # IV and Greeks per option per minute (~2 min)
+python -m tradeloop.check_history            # quality report; exit 1 if any expiry has problems
+```
+
+Per expiry, the final week (expiry - 6 days to the close) of the index, every strike from
+the week's low to high plus 10 either side, and the future:
+`data/history/candles_1m/<EX>_<INDEX>/<expiry>.parquet`, daily index candles in
+`candles_1d/` (the daily close is the official close options settle on), IV/Greeks in
+`greeks_1m/`. `data/history/expiries.csv` lists every expiry and its status (ok, ghost =
+listed but never traded, no_index_data = holiday-shifted, failed). The backfill resumes
+where it stopped and retries failed expiries; `--refetch` downloads a range again.
+
+- Groww has NIFTY from Jan 2020 and SENSEX from Aug 2023, OI included, no IV/Greeks
+  (we derive them: Black-76 on the synthetic forward from put-call parity).
+- Groww returns some candles twice and some futures minutes with no prices; the backfill
+  cleans both before writing.
+- The token expires at 06:00 IST: a run past that fails the remaining expiries; run it again.
+- Run it under `caffeinate -i` on a Mac so it doesn't sleep.
+- Data is git-ignored and must stay so (exchange data, public repo). Back up
+  `candles_1m/` and `candles_1d/` privately; `greeks_1m/` can be recomputed.
 
 ## First run checklist
 
@@ -77,8 +102,9 @@ next year's holiday list; asking about a year that isn't there raises an error o
 | --- | --- |
 | `tradeloop/core/` | Broker-neutral core: instrument IDs, types, `MarketData`/`Execution` interfaces, event bus |
 | `tradeloop/recorder.py`, `instruments.py`, `feed_parse.py`, `store.py`, `health.py` | Tick recorder (Groww) |
+| `tradeloop/backfill.py`, `greeks.py`, `derive_greeks.py`, `check_history.py` | Historical candles, IV/Greeks, quality check |
 | `CLAUDE.md` | Architecture rules and next steps, for Claude Code |
 
 ## Next
 
-Move the Groww code behind the core interfaces, then a market calendar, ledger and paper broker, and a minimal engine running one expiry-day rule in paper mode. See `CLAUDE.md`.
+Ledger (with charges) and a fill model, then a minimal engine running one expiry-day rule as a backtest on the downloaded history, then paper trading on the live feed. See `CLAUDE.md`.

@@ -7,6 +7,11 @@ session:                 # IST, normal trading day
   open: "09:15"
   close: "15:30"
 
+session_changes:         # from each date on, these times replace the ones above
+  # F&O close moved to 15:40 when NSE added a closing auction to the cash market
+  # (BSE too). Groww's candles agree: options trade until 15:40 from 3 Aug 2026.
+  2026-08-03: {close: "15:40"}
+
 holidays:
   # NSE circular NSE/CMTR/71775 (holidays 2026), plus 15 Jan added later.
   # 10 Nov and 24 Nov also confirmed by Groww's instrument list: NIFTY expiries

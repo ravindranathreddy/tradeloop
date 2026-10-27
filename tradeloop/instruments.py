@@ -22,15 +22,16 @@ def nearest_expiry(options: list[Contract], today: date) -> date | None:
     return min(future) if future else None
 
 
-def strike_step(chain: list[Contract]) -> float:
-    strikes = sorted({c.instrument.strike for c in chain})
+def strike_step(strikes: Iterable[float]) -> float:
+    """The usual gap between strikes (some chains have wider gaps far from ATM)."""
+    strikes = sorted(set(strikes))
     gaps = Counter(b - a for a, b in zip(strikes, strikes[1:]))
     return gaps.most_common(1)[0][0] if gaps else 0.0
 
 
 def select_strikes(chain: list[Contract], spot: float, each_side: int) -> list[Contract]:
     """CE and PE contracts for the ATM strike and `each_side` strikes above and below."""
-    step = strike_step(chain)
+    step = strike_step(c.instrument.strike for c in chain)
     if step > 0:
         atm = round(spot / step) * step
         lo, hi = atm - each_side * step, atm + each_side * step

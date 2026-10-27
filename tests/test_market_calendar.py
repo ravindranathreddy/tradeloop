@@ -52,13 +52,20 @@ def test_next_and_previous_trading_day(cal):
 
 def test_session_times(cal):
     s = cal.session(d("2026-10-27"))
-    assert (s.pre_open.time(), s.open.time(), s.close.time()) == (time(9, 0), time(9, 15), time(15, 30))
+    assert (s.pre_open.time(), s.open.time(), s.close.time()) == (time(9, 0), time(9, 15), time(15, 40))
     assert s.open.tzinfo == IST
     assert cal.session(d("2026-11-10")) is None
     assert cal.is_open(datetime(2026, 10, 27, 9, 15, tzinfo=IST))
     assert not cal.is_open(datetime(2026, 10, 27, 9, 10, tzinfo=IST))   # pre-open
-    assert not cal.is_open(datetime(2026, 10, 27, 15, 30, tzinfo=IST))
+    assert cal.is_open(datetime(2026, 10, 27, 15, 35, tzinfo=IST))
+    assert not cal.is_open(datetime(2026, 10, 27, 15, 40, tzinfo=IST))
     assert cal.is_open(datetime(2026, 10, 27, 4, 0, tzinfo=timezone.utc))         # 09:30 IST
+
+
+def test_fno_close_moved_to_1540_on_3_aug_2026(cal):
+    assert cal.close_time(d("2026-07-31")) == time(15, 30)
+    assert cal.close_time(d("2026-08-03")) == time(15, 40)
+    assert cal.close_time(d("2021-02-04")) == time(15, 30)      # no holiday list needed
 
 
 # --- expiries -------------------------------------------------------------------

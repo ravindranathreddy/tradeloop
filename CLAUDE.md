@@ -84,7 +84,11 @@ Scalping is out.
 - `tradeloop/core/market_calendar.py` + `market_calendar.yaml`: trading days, sessions,
   expiries (holiday-shifted). Unknown years raise. Broker-listed expiries win; the
   recorder cross-checks them against the calendar at startup and skips holidays.
-  Update the yaml yearly when NSE publishes the holiday list.
+  Update the yaml yearly when NSE publishes the holiday list. Session times can change by
+  date (`session_changes`): the F&O close moved from 15:30 to 15:40 on 3 Aug 2026.
+  Code asks `close_time(d)`; never hard-code 15:30.
+- `tradeloop/backfill.py` + `derive_greeks.py` + `check_history.py`: historical candles in
+  `data/history/` (git-ignored), IV/Greeks derived, quality checked. See README.
 - Groww's live feed runs over NATS; only the official Python SDK (`growwapi`) is used.
   Auth: TOTP (`GROWW_API_KEY` + `GROWW_TOTP_SECRET`); tokens expire 06:00 IST daily.
 
@@ -103,9 +107,12 @@ check, not the main evidence.
 3. Market calendar — done for 2026 onward. Expiry history before Sep 2025 (weekday
    changes, transition exceptions) and pre-2026 trading days come from broker data in
    step 4, not hand-written rules.
-4. Candle downloader: 1-minute candles for past NIFTY/SENSEX expiries (index + strikes
-   around ATM) into the archive format. Confirm on first real call: expired contracts
-   available, OI in option candles, rate limits.
+4. Candle downloader — done. 523 expiries: NIFTY Jan 2020-Oct 2026, SENSEX Aug 2023-Oct
+   2026, ~680 MB. Expired contracts and OI available; no IV/Greeks from Groww, so we derive
+   them. Options settle within ~0.5 pts of the official close. Known gaps (backtests skip):
+   NIFTY 2026-07-07 and SENSEX 2026-02-26 (Groww's contract list incomplete), NIFTY
+   2026-09-29 (data stops ~14:00), SENSEX 2023-10-20 (a few strikes settle 6-13 pts off).
+   Lot sizes aren't in Groww's history; step 6 needs them from NSE/BSE.
 5. Ledger (double-entry, date-aware charges) and fill model: conservative spread/slippage
    on candles, no fills where nothing traded; later calibrated from recorded depth.
 6. Minimal engine running Ranga's first expiry-day rule from config, in backtest mode on

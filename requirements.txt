@@ -5,3 +5,4 @@ pandas
 pyyaml
 pytest
 pyarrow
+scipy
