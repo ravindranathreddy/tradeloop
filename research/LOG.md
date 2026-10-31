@@ -198,3 +198,30 @@ the effect being real rather than one lucky setting. Base config unchanged.
 - Exit timing: does closing a sold straddle earlier (e.g. 13:00) change the tail?
 - Event days (RBI, budget): needs an event calendar.
 - OI as a filter rather than a level (e.g. very lopsided PCR days): only with a reason.
+
+## Pre-registration: volatility filter on the put credit spread (31 Oct 2026, before running)
+
+Question: do the few big losses of the frozen spread (strategies/put_credit_spread.yaml,
+NIFTY) cluster on days when volatility was already high at the 09:20 entry? Reason it
+might: a sold put 2.5% below is ~1.9 expected-move standard deviations away at 15% IV
+but only ~1.1 at 25% IV, so the spread is much more likely to be hit when IV is high.
+Reason it might not: high-IV days also pay a richer premium.
+
+Two filters, one threshold each, round numbers fixed now (variants tried: 2):
+- A (primary): skip the week if ATM implied volatility at the 09:20 entry is above 20%.
+  ATM IV = mean of call and put IV at the strike nearest the index, forward from put-call
+  parity (same code as derive_greeks).
+- B (alternative): skip if realised volatility of the previous 10 daily closes is above 20%
+  (annualised). No option prices needed.
+
+Develop on NIFTY 2020-2024 (the 260-trade backtest, charges and slippage included).
+A filter PASSES development if all of:
+  (a) it skips at least half of the weeks that lost more than Rs 5,000 per lot;
+  (b) the weeks it keeps earn at least 90% of the unfiltered total net P&L;
+  (c) it skips no more than 30% of the weeks.
+Only a filter that passes is judged once on NIFTY 2025-26 (held out; already opened once
+for the base rule, so this counts for less): it must keep at least 85% of that period's
+total net P&L. That period was calm (2 falls over 2% in 87 weeks), so it can show the
+filter does not cost much but cannot show it protects. With few big-loss weeks in
+development, even a pass is weak evidence; adopt only with Ranga's approval, and paper
+trading is the next unseen test. If neither passes, the answer is "no filter".
