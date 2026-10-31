@@ -166,6 +166,19 @@ check, not the main evidence.
    and drop rules in research/memos/put_credit_spread.md). First paper trade Mon 2 Nov
    2026. 30 trades / 4+ weeks, then Ranga's review before any real money.
 
+## Decisions pending (Ranga's; do not decide them for him)
+
+- **Open-loss kill: `watchdog.max_open_loss` is Rs 20,000 for now (30 Oct 2026 decision: keep it).** It is an
+  absolute rupee amount, one value for paper and live. One NIFTY lot caps at about Rs 29k at index 22,900
+  (the cap is 2% of the index x 65, so it moves ~Rs 1,300 per 1,000 index points), so 20k is ~69% of the cap
+  today. Revisit after the paper data shows how often it triggers: keep fixed, make it a percent of the cap,
+  or give live its own `live.max_open_loss`.
+- **Cumulative live loss limit across weeks** (e.g. stop entering after Rs X lost): not built, needs his number.
+  Suggested ~Rs 40k, about 1.4 max-loss trades.
+- **Lot size for the first live trades:** 1 lot (`live.max_lots: 1`) unless he says otherwise. The Rs 100k margin
+  cap also blocks a second lot.
+- Archive long-term home, the 26 unverified event dates, and when to arm live (see LIVE_CHECKLIST.md).
+
 ## Research method (how rules are found)
 
 Rules should come from data (IV, Greeks, OI, price), but 523 expiries will always contain
