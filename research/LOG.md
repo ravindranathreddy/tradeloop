@@ -305,3 +305,28 @@ Held-out period not opened (variants tried: 2, plus the 2 in the filter study).
 If wanted, test 1 could run in paper as a separate strategy id: that is unseen data, and
 Ranga's call. Combining the two, a different width, or other thresholds are new variants.
 Code kept: `exit_within_pct` in the credit spread (off by default; paper config unchanged).
+
+## Pre-registration: event filter on the put credit spread (31 Oct 2026, before running)
+
+Candidate rule: skip the week if a scheduled event (RBI decision, FOMC decision, Union Budget,
+general-election result; events.yaml) reacts between the 09:20 entry and the expiry close.
+An event counts if its reaction day is after the entry day, or is the entry day and the event
+is announced in session (RBI ~10:00, Budget 11:00, election counting): both come after the
+spread is sold. An FOMC decision whose reaction day is the entry day does not count: the
+gap happened before 09:20 and is already in the premium.
+Reason: events cause overnight or intraday gaps, which hurt a short option most.
+
+Honest expectation, written before running: I have already seen the dates of the 7 worst
+weeks of 2020-24 (Mar 2020 x2, Sep 2020, Mar 2021, Jan 2022, Feb 2022, May 2022). Several
+look like unscheduled shocks (the Feb 2022 invasion; the Mar 2020 sell-off), which this rule
+cannot catch. I expect it to fail (a). It is tested because Ranga asked and because it is
+the one rule with a reason that needs no IV or price input.
+
+Development: NIFTY 2020-2024, the same 260 weeks and base P&L as the filter study. PASS needs:
+  (a) skips at least half of the weeks that lost more than Rs 5,000 per lot;
+  (b) the weeks kept earn at least 90% of the unfiltered total net P&L;
+  (c) skips no more than 30% of the weeks.
+Held-out 2025-26 only if it passes: kept total at least 85% of the base's.
+Also reported, not decisive: the same rule using only events whose date is verified
+(source official or news), to show whether the 26 unchecked dates change the answer; and
+skipped weeks the base won. Variants tried: 1.
