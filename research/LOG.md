@@ -225,3 +225,25 @@ total net P&L. That period was calm (2 falls over 2% in 87 weeks), so it can sho
 filter does not cost much but cannot show it protects. With few big-loss weeks in
 development, even a pass is weak evidence; adopt only with Ranga's approval, and paper
 trading is the next unseen test. If neither passes, the answer is "no filter".
+
+## Result: volatility filter, development 2020-2024 (31 Oct 2026)
+
+`research/vol_filter_study.py`, NIFTY, 260 traded weeks, Rs per lot after charges and slippage.
+Unfiltered: total Rs 44,217, 7 weeks lost more than Rs 5,000, worst Rs -13,489.
+
+| filter | weeks skipped | kept total | big losses skipped | verdict |
+|---|---|---|---|---|
+| A: ATM IV at entry > 20% | 96 (37%) | Rs 16,796 (38%) | 6 of 7 | FAIL (b, c) |
+| B: 10-day realised vol > 20% | 39 (15%) | Rs 28,993 (66%) | 3 of 7 | FAIL (a, b) |
+
+Reading: the reason "it might not" held. High-IV weeks are where the spread earns most: the
+96 weeks filter A skips made Rs 27,421, 62% of all profit. Filter A does catch 6 of the 7 big
+losses (worst week drops from -13,489 to -7,007) but costs over 60% of the income, so it is
+a different, much smaller strategy, not a free improvement. Filter B misses over half the
+big losses (calm-looking markets before a fall) and still gives up a third of the profit.
+Seven big-loss weeks is too few to learn a threshold from.
+
+Conclusion: no volatility filter. The held-out period was not opened (variants tried: 2).
+Not tried, and not to be tuned now: other thresholds, a sizing rule (smaller lots at high IV
+instead of skipping). A sizing rule is the one idea this result points at; it needs its
+own pre-registration. The big-loss risk stays as designed: capped at Rs 14-27k per lot.
