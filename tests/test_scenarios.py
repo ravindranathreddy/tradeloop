@@ -181,3 +181,10 @@ def test_live_no_margin_figure_means_no_orders_at_all(runs):
     r = runs["live_margin_unreadable"]
     assert r.sent() == [] and r.fills() == [] and r.ledger().positions() == []
     assert "margin check failed (ConnectionError" in r.log
+
+
+def test_live_hung_groww_call_does_not_stall_the_feed_and_the_trade_still_completes(runs):
+    r = runs["live_hung_groww"]
+    assert r.max_tick_gap_s() < 30                                                      # the hang lasted 90 simulated seconds
+    assert [(f[0], f[1]) for f in r.fills()] == [(LONG, "BUY"), (SHORT, "SELL")]
+    assert r.sent() == [(LLONG, "BUY", "LIMIT"), (LSHORT, "SELL", "LIMIT")] and r.kill() is None

@@ -23,6 +23,7 @@ across days) that fills orders against the fake feed's order book. More keys:
   groww_timeout_lands        the first order's response times out, though Groww has the order
   groww_available: rupees    free option-selling margin (default 300000)
   groww_margin_down          the margin endpoints fail
+  groww_hang_seconds: n      the first place_order hangs this many REAL seconds (60 simulated seconds each)
 """
 import json
 import os
@@ -154,6 +155,9 @@ if SPEC.get("groww"):
 
         def place_order(self, **kw):
             self._down()
+            if SPEC.get("groww_hang_seconds") and not getattr(self, "hung", False):
+                self.hung = True
+                time.sleep(float(SPEC["groww_hang_seconds"]))
             self.placed.append({"hm": hm_now(), "symbol": kw["trading_symbol"], "side": kw["transaction_type"],
                                 "type": kw["order_type"], "price": kw.get("price"), "ref": kw["order_reference_id"]})
             try:

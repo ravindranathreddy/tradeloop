@@ -143,6 +143,10 @@ check, not the main evidence.
    enabled+armed both false), `live_kill.py` (`kill_switch flatten-live --yes`, refuses while the recorder
    is alive), reconciliation also checks Groww positions and untagged orders, watchdog trips on 3 failed
    position reads and its cron heartbeat check covers live positions.
+   Worker thread: every blocking Groww call (place, cancel, poll, cancel-all) runs on one thread in
+   LiveBroker (`live.worker_thread`, default on); events reach the ledger only via `drain()` on the
+   caller's thread, and the broker's own `working()` changes in the same step as the ledger (else a kill
+   double-exits: tested, with a mutation check). `GrowwExecution.working()` is lock-free for the same reason.
    Pre-trade margin check (`margin_guard.py`, plugged into RiskGate as `gate.margin`): quotes the whole
    book as one basket, refuses without enough free margin (extra x 1.5 for expiry day), above a
    Rs 100k book cap (so a naked short can't pass), or without Rs 90k free to start a spread; closing

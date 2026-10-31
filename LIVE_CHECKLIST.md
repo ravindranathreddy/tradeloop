@@ -25,9 +25,12 @@ Status: `open` = not yet seen, `checked` = observed (add date and what happened)
 - **Duplicate order_reference_id** (open). Not documented. The adapter looks the reference up before
   sending and never resends after an unknown failure, so it doesn't rely on Groww rejecting a duplicate.
 - **Rate limits** (open). `LiveBroker` polls a working order at most once a second.
-- **Polling on the tick thread** (open design risk). A hung Groww call could stall the feed handler
-  for up to the 10 s timeout. Move order I/O to a worker thread before arming. (The watchdog thread
-  also drives kills and polling with the feed dead, via `PaperTrader.tend`.)
+- **Worker thread** (built; two things a fake cannot show, open). Groww calls run on one worker thread,
+  so a slow Groww no longer stalls the feed (drill: a 90 s hang left a 7 s gap in the tick recording,
+  97 s without the thread). Check live: (a) the Groww SDK tolerates the worker's calls overlapping with
+  the watchdog thread's `get_positions_for_user` every 5 s; (b) because there is one worker, a kill's
+  exit orders queue behind a hung entry call for up to the 10 s timeout. If (a) misbehaves, give the
+  watchdog's position read its own lock or client; if (b) matters, lower `GrowwExecution(timeout=...)`.
 - **Standalone flatten prices** (open). `kill_switch flatten-live` has no live book, so it prices exits
   from the last recorded price with a 10% buffer (MARKET if there is none). Check on a real exit that
   this fills, and that 10% is a sensible width.

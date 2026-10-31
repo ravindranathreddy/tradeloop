@@ -97,8 +97,8 @@ class GrowwExecution:
         self._fill_handlers.append(handler)
 
     def working(self) -> list[Order]:
-        with self._lock:
-            return [t.order for t in self._tracked.values() if not t.final]
+        # No lock: place() holds it through its HTTP call, and asking what is working must never wait on Groww.
+        return [t.order for t in list(self._tracked.values()) if not t.final]
 
     def place(self, order: Order) -> None:
         with self._lock:

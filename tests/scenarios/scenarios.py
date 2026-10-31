@@ -89,6 +89,14 @@ class Run:
     def sent(self) -> list[tuple]:
         return [(o["symbol"], o["side"], o["type"]) for o in self.groww()["placed"]]
 
+    def max_tick_gap_s(self, instrument: str = "NSE|NIFTY|IDX") -> float:
+        """Longest simulated silence between two recorded NIFTY ticks: a stalled feed handler shows up here."""
+        import sqlite3
+
+        ts = [t for (t,) in sqlite3.connect(self.dir / "ticks.db").execute(
+            "SELECT ts_ms FROM ltp WHERE instrument = ? ORDER BY ts_ms", (instrument,))]
+        return max(b - a for a, b in zip(ts, ts[1:])) / 1000
+
     def fix_groww(self) -> None:
         """Ranga sorts out the account: stray positions and foreign orders removed."""
         d = self.groww()
@@ -212,6 +220,10 @@ def live_margin_unreadable(r: Run):
     r.day(MON, "09:50", groww_margin_down=True)
 
 
+def live_hung_groww(r: Run):
+    r.day(MON, "10:00", groww_hang_seconds=1.5)          # 90 simulated seconds
+
+
 def live_and_paper_together(r: Run):
     r.day(MON, "10:00")
     r.day(TUE, "09:45")
@@ -222,7 +234,7 @@ SCENARIOS = {f.__name__: f for f in (normal_week, dead_feed, crash_move, manual_
 LIVE_SCENARIOS = {f.__name__: f for f in (live_normal_week, live_unarmed, live_dead_feed, live_manual_kill,
                                           live_startup_mismatch, live_foreign_order, live_groww_outage,
                                           live_recorder_crash, live_lost_response, live_and_paper_together,
-                                          live_margin_short, live_margin_unreadable)}
+                                          live_margin_short, live_margin_unreadable, live_hung_groww)}
 LIVE_FLAGS = {"live_unarmed": {"armed": False}, "live_and_paper_together": {"armed": True, "paper": True},
               "live_margin_short": {"margin_min_free": 0}}       # the entry floor off, so the protection does get bought
 SCENARIOS |= LIVE_SCENARIOS

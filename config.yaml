@@ -51,3 +51,4 @@ live:
   margin_buffer: 1.5        # free margin must cover the extra margin x this (expiry-day margin is higher than entry)
   margin_min_free: 90000    # free option-selling margin needed before a new spread starts (about 1.5x Rs 60k)
   max_margin: 100000        # cap on the book's total margin; a naked short (about Rs 125k) can never pass
+  worker_thread: true       # Groww calls run on their own thread, so a slow Groww never stalls the feed

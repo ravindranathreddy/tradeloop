@@ -186,7 +186,8 @@ def live_traders(cfg: dict, rec: Recorder, md: MarketData, api) -> list:
             ex.cancel_orphans()
             broker = LiveBroker(ex, symbols, stale_ms=int(cfg.get("paper_stale_ms", 10_000)),
                                 max_wait_minutes=float(live.get("order_wait_minutes", 2)),
-                                buffer_ticks=int(live.get("buffer_ticks", 4)))
+                                buffer_ticks=int(live.get("buffer_ticks", 4)),
+                                threaded=live.get("worker_thread", True) is not False)
             t = PaperTrader(Path(path), store, max_lots=int(live.get("max_lots", 1)), lot_size=lot_size,
                             kill_file=Path(cfg.get("kill_file", "data/KILL")), broker=broker)
             t.gate.margin = MarginGuard(
@@ -292,6 +293,8 @@ def main():
 
     rec.start()
     md.run()
+    for t in traders:
+        getattr(t.broker, "close", lambda: None)()           # a live broker finishes its queued Groww calls
     rec.finish()
     if rec.stopped_for_disk:
         sys.exit(1)
