@@ -142,7 +142,7 @@ def build(cfg: dict, api, today: date, **adapter_kw):
 
     md = GrowwMarketData(api, depth=cfg.get("record_depth", True),
                          poll_seconds=float(cfg.get("poll_seconds", 0.5)),
-                         stale_seconds=float(cfg.get("stale_seconds", 30)), **adapter_kw)
+                         stale_seconds=float(cfg.get("stale_seconds", 10)), **adapter_kw)
     return Recorder(cfg, md, Store(cfg["db_path"]), today), md
 
 

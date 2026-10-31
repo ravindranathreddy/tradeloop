@@ -1,7 +1,8 @@
 db_path: data/ticks.db
 end_time: "15:41"        # IST; recorder exits after this (F&O closes 15:40 from 3 Aug 2026)
 poll_seconds: 0.5
-stale_seconds: 30        # no new data this long -> rebuild the feed connection
+stale_seconds: 10        # no new data this long -> rebuild the feed connection (normal silence is under 3 s;
+                         # the paper broker won't fill from a book older than 10 s)
 min_free_gb: 5           # refuse to start / stop cleanly below this much free disk
 record_depth: true       # top-5 bid/ask; needed later for realistic paper fills
 

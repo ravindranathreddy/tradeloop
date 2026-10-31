@@ -224,3 +224,23 @@ def test_book_json_round_trip_via_writer(tmp_path):
     (book,) = s.conn.execute("SELECT book_json FROM depth").fetchone()
     assert json.loads(book) == {"buy": [[1420.2, 120.0], [1420.1, 30.0]],
                                 "sell": [[1420.4, 5.0], [1420.5, 450.0]]}
+
+
+def test_ten_second_timer_ignores_a_short_pause_and_rebuilds_after_a_long_one():
+    FakeFeed.made = []
+    clock = Clock()
+    m = GrowwMarketData(api=None, contracts=CONTRACTS, feed_factory=FakeFeed, clock=clock, stale_seconds=10)
+    m.subscribe([NIFTY])
+    m.poll_once()
+    clock.t += 9                             # normal silence on the real feed is under 3 s
+    m.poll_once()
+    assert len(FakeFeed.made) == 1
+    clock.t += 2                             # 11 s since the last data
+    m.poll_once()
+    assert len(FakeFeed.made) == 2
+    clock.t += 11                            # still silent, but this attempt waits 20 s (the wait doubles)
+    m.poll_once()
+    assert len(FakeFeed.made) == 2
+    clock.t += 10
+    m.poll_once()
+    assert len(FakeFeed.made) == 3
