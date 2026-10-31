@@ -138,6 +138,14 @@ check, not the main evidence.
    critical ones; secrets in .env; `python -m tradeloop.alerts test`; verified on Ranga's phone and
    inbox 31 Oct 2026; never let an alert failure block an order or a kill). Five ways of cutting the spread's big losses were tested and all
    failed (research/LOG.md): the lever left is lot size.
+   Live wiring (built, OFF): `live_broker.py` (GrowwExecution behind the paper trader: marketable limits,
+   polling, `tend()` so a kill works with the feed dead), `live_traders()` in recorder.py (config `live:`
+   enabled+armed both false), `live_kill.py` (`kill_switch flatten-live --yes`, refuses while the recorder
+   is alive), reconciliation also checks Groww positions and untagged orders, watchdog trips on 3 failed
+   position reads and its cron heartbeat check covers live positions. 10 live scenario drills against a
+   fake Groww exchange (`tests/scenarios`). The drills found two real bugs (a failing cancel_all lost the
+   kill; the heartbeat check ignored live positions): both fixed with regression tests. Never set
+   `live.armed: true` in a commit.
    Groww `Execution` adapter (mid-Nov plan): stages 1-3 done (`brokers/groww_orders.py`,
    `brokers/groww_execution.py`, `groww_smoke.py`). Unarmed by default (`armed=False` refuses every
    order); never place a real order without Ranga's explicit go-ahead. Verified read-only on Ranga's

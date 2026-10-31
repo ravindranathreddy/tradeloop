@@ -49,6 +49,7 @@ class LiveBroker:
         self._clock = clock_ms
         self._books: dict[InstrumentId, _Book] = {}
         self._placed_ms: dict[str, int] = {}
+        self._cancel_asked_ms: dict[str, int] = {}
         self._last_poll_ms = 0
 
     @property
@@ -73,8 +74,26 @@ class LiveBroker:
         """About once a minute: poll, and cancel what has waited too long (the price ran away)."""
         now = self._clock()
         self._poll(now, force=True)
+        self._cancel_overdue(now)
+
+    def tend(self) -> None:
+        """Between ticks (watchdog thread): keep fills and cancels moving when the feed is quiet."""
+        now = self._clock()
+        if self.execution.working():
+            self._poll(now)
+            self._cancel_overdue(now)
+
+    def seed_prices(self, prices: dict[InstrumentId, float]) -> None:
+        """Last known prices for a process that has no feed (the standalone kill). Treated as stale, so
+        orders get the wide buffer."""
+        for i, p in prices.items():
+            self._books[i] = _Book(0, p, p)
+
+    def _cancel_overdue(self, now: int) -> None:
         for o in self.execution.working():
-            if now - self._placed_ms.get(o.client_ref, now) >= self._wait_ms:
+            asked = self._cancel_asked_ms.get(o.client_ref)
+            if now - self._placed_ms.get(o.client_ref, now) >= self._wait_ms and (asked is None or now - asked > 30_000):
+                self._cancel_asked_ms[o.client_ref] = now
                 log.warning("%s %d %s unfilled after %ds: cancelling", o.side.value, o.qty, o.instrument,
                             self._wait_ms // 1000)
                 self.execution.cancel(o.client_ref)

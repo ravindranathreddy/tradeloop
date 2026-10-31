@@ -64,6 +64,22 @@ def compare(ledger: Iterable[Position], broker: Iterable[Position], today: date)
     return out, awaiting
 
 
+def untagged_orders(traders: list) -> list[dict] | None:
+    """Orders in a live account that did not come from the bot (Rule #1), or None if they can't be read.
+    Paper brokers have none."""
+    out = []
+    for t in traders:
+        ex = getattr(t.broker, "execution", None)
+        if ex is None:
+            continue
+        try:
+            out += ex.untagged_orders()
+        except Exception as e:
+            log.error("ALERT reconciliation could not read the broker's orders: %s: %s", type(e).__name__, e)
+            return None
+    return out
+
+
 def startup_check(traders: list, kill_file: Path, today: date, now_ms: int | None = None) -> list[Mismatch]:
     """Compare every trader's ledger with its broker; on any mismatch halt all strategies.
     If the broker's positions can't be read at all (an unknown contract, an ambiguous row, a
@@ -75,14 +91,22 @@ def startup_check(traders: list, kill_file: Path, today: date, now_ms: int | Non
         if active(kill_file) is None:
             request(kill_file, f"reconciliation: could not read broker positions ({type(e).__name__}: {e})", now_ms, flatten=False)
         return [Mismatch("unreadable", None, 0, 0)]
+    stray = untagged_orders(traders)
+    if stray is None:
+        if active(kill_file) is None:
+            request(kill_file, "reconciliation: could not read the broker's orders", now_ms, flatten=False)
+        return [Mismatch("unreadable", None, 0, 0)]
     mismatches, awaiting = compare((p for t in traders for p in t.ledger.positions()), broker, today)
     for i in awaiting:
         log.warning("ALERT %s expired and still in the ledger: run `python -m tradeloop.paper settle`", i)
-    if mismatches:
+    for r in stray:
+        log.error("ALERT reconciliation: an order in the account is not ours (Rule #1): %s", r)
+    if mismatches or stray:
         for m in mismatches:
             log.error("ALERT reconciliation mismatch, %s", m)
         if active(kill_file) is None:
-            request(kill_file, "reconciliation: " + "; ".join(str(m) for m in mismatches), now_ms, flatten=False)
+            why = [str(m) for m in mismatches] + [f"untagged order {r.get('order_reference_id')!r}" for r in stray]
+            request(kill_file, "reconciliation: " + "; ".join(why), now_ms, flatten=False)
     else:
         live = len(net(p for t in traders for p in t.ledger.positions())) - len(awaiting)
         log.info("Reconciled: ledger and broker agree on %d live positions", live)

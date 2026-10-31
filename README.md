@@ -36,6 +36,12 @@ Strikes: ATM ± 15 by default, re-centred if spot moves far. About 124 contracts
    on simulated days; about 2 minutes): `RUN_SCENARIOS=1 pytest tests/test_scenarios.py`. Run them
    after changing anything in the safety layer.
 
+Live trading (off): `live:` in config.yaml runs the same strategy through the Groww adapter into
+`data/live.db`. It sends nothing until both `enabled` and `armed` are true; arming is Ranga's decision
+(see LIVE_CHECKLIST.md). Settle and report the live ledger with `python -m tradeloop.paper settle --live`
+and `report --live`. If the recorder is dead with live positions:
+`python -m tradeloop.kill_switch flatten-live --yes`.
+
 Phone alerts: every `ALERT` log line (kill switch, watchdog, reconciliation, Groww gave up) goes to
 Telegram, with Gmail as the backup and for critical ones. Put the values from `.env.example` in
 `.env` (Telegram bot token and chat id from @BotFather; a Gmail app password, never the real

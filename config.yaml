@@ -37,3 +37,14 @@ alerts:
   dedupe_seconds: 300       # the same alert repeats at most this often
   max_per_minute: 10        # a flood is cut off here
   state_file: data/alert_state.json
+
+# Live trading through the Groww adapter (tradeloop/live_broker.py). OFF. Nothing here sends a real
+# order until BOTH enabled and armed are true, and arming is Ranga's decision (see LIVE_CHECKLIST.md).
+live:
+  enabled: false
+  armed: false              # true = real orders. Never changed by Claude.
+  strategies: [strategies/put_credit_spread.yaml]
+  db: data/live.db          # live ledger, separate from paper
+  max_lots: 1
+  order_wait_minutes: 2     # cancel an order unfilled this long
+  buffer_ticks: 4           # a market order goes out as a limit this many ticks through the book

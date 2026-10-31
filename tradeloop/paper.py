@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import threading
 import time
 from collections.abc import Callable
 from datetime import date, datetime, time as dtime
@@ -41,6 +42,7 @@ from tradeloop.strategies import REGISTRY
 
 log = logging.getLogger("paper")
 MINUTE_MS = 60_000
+CANCEL_TRIES = 3             # the kill switch tries to cancel working orders this many times, then flattens anyway
 DECIDE_AFTER_MS = 2_000      # into the new minute, so every order book has refreshed
 
 
@@ -96,7 +98,8 @@ class PaperTrader:
         self.kill_file, self.halted = kill_file, False
         self._killed_ms: int | None = None         # the kill request already acted on
         self._kill_check_ms = 0
-        self._flattening, self._attempts = False, {}
+        self._flattening, self._attempts, self._cancel_tries = False, {}, None
+        self._lock = threading.RLock()             # the tick thread and the watchdog's tend() never run together
         execution = _Recorded(gate, store, clock_ms)
         self._direct = _Recorded(self.broker, store, clock_ms)
         self.ledger = store.rebuild_ledger(self.strategy_id)
@@ -130,10 +133,20 @@ class PaperTrader:
                 log.warning("ALERT halted (%s): %s places no orders until resumed", req["reason"], self.strategy_id)
                 return
             log.warning("ALERT kill switch (%s): flattening %s", req["reason"], self.strategy_id)
-            self._direct.cancel_all()
-            self._flattening = True
+            self._flattening, self._cancel_tries = True, 0       # set first: a failing cancel must not lose the kill
         if not self._flattening:
             return
+        if self._cancel_tries is not None:
+            try:
+                self._direct.cancel_all()
+                self._cancel_tries = None
+            except Exception as e:                  # a live broker can fail here; retry, then flatten regardless
+                self._cancel_tries += 1
+                log.error("ALERT kill switch: could not cancel working orders (try %d): %s: %s",
+                          self._cancel_tries, type(e).__name__, e)
+                if self._cancel_tries < CANCEL_TRIES:
+                    return
+                self._cancel_tries = None
         positions = self.ledger.positions()
         if not positions:
             self._flattening = False
@@ -142,7 +155,21 @@ class PaperTrader:
         flatten_step(self._direct, positions, self.broker.working(), strategy_id=self.strategy_id,
                      config_version=self.version, request_ms=self._killed_ms, attempts=self._attempts)
 
+    def tend(self) -> None:
+        """Called every few seconds from the watchdog thread, with or without ticks. A live broker answers
+        on Groww's clock, and a dead feed is exactly when a kill must still make progress, so the kill
+        check and the order polling can't wait for a tick. Paper has nothing to do between ticks."""
+        if not hasattr(self.broker, "tend"):
+            return
+        with self._lock:
+            self._check_kill()
+            self.broker.tend()
+
     def on_tick(self, tick: Tick) -> None:
+        with self._lock:
+            self._on_tick(tick)
+
+    def _on_tick(self, tick: Tick) -> None:
         self._check_kill()
         self.broker.on_tick(tick)
         iid = tick.instrument
@@ -244,9 +271,13 @@ def main():
     p.add_argument("command", choices=["settle", "report"])
     p.add_argument("--config", default="config.yaml")
     p.add_argument("--day", default=datetime.now(IST).date().isoformat(), help="expiry day to settle")
+    p.add_argument("--live", action="store_true", help="the live ledger (config live:) instead of paper")
     a = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = yaml.safe_load(Path(a.config).read_text())
+    if a.live:
+        live = cfg.get("live") or {}
+        cfg = {**cfg, "paper": live.get("strategies", []), "paper_db": live.get("db", "data/live.db")}
     store = PaperStore(cfg.get("paper_db", "data/paper.db"))
     if a.command == "settle":
         for line in settle(cfg, store, login(), date.fromisoformat(a.day)):

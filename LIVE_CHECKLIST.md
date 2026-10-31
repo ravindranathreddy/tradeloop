@@ -4,6 +4,9 @@ Things the code assumes but has not yet seen happen at Groww. Each one is checke
 order (or read-only on the day named), and its line is updated with what was actually observed.
 Nothing here is armed: `GrowwExecution` stays `armed=False` until Ranga says go.
 
+What is already tested offline (fake Groww API, 10 live scenario drills): see the live_* drills in
+`tests/test_scenarios.py`. This file is only about what a fake cannot tell us.
+
 Status: `open` = not yet seen, `checked` = observed (add date and what happened).
 
 ## Orders
@@ -23,7 +26,13 @@ Status: `open` = not yet seen, `checked` = observed (add date and what happened)
   sending and never resends after an unknown failure, so it doesn't rely on Groww rejecting a duplicate.
 - **Rate limits** (open). `LiveBroker` polls a working order at most once a second.
 - **Polling on the tick thread** (open design risk). A hung Groww call could stall the feed handler
-  for up to the 10 s timeout. Move order I/O to a worker thread before arming.
+  for up to the 10 s timeout. Move order I/O to a worker thread before arming. (The watchdog thread
+  also drives kills and polling with the feed dead, via `PaperTrader.tend`.)
+- **Standalone flatten prices** (open). `kill_switch flatten-live` has no live book, so it prices exits
+  from the last recorded price with a 10% buffer (MARKET if there is none). Check on a real exit that
+  this fills, and that 10% is a sensible width.
+- **Cancel-all scope** (open). `cancel_all` cancels every working order in the account, including ones
+  that are not ours. That is intended for a kill; in a shared account it means manual orders go too.
 
 ## Margin
 
@@ -48,3 +57,13 @@ Status: `open` = not yet seen, `checked` = observed (add date and what happened)
 - **Static IP** (open). Groww API orders need a registered static IP (the Mumbai VM, mid-Nov).
 - **Account** (open). Real trading is in Ranga's mother's account (lower tax slab), after the CA and
   consent steps.
+
+## Before arming (Ranga's switch)
+
+1. Everything above that matters is `checked`, or consciously accepted.
+2. `config.yaml`: `live.enabled: true` and `live.armed: true` (only `true`, exactly; anything else stays
+   unarmed). `tests/test_live_wiring.py::test_the_committed_config_never_sends_real_orders` guards the
+   committed file: arm on the trading machine, do not commit it armed.
+3. The recorder announces `ALERT LIVE ARMED, REAL ORDERS WILL BE SENT` at start (phone alert).
+4. Settle live expiries after the close: `python -m tradeloop.paper settle --live` (and `report --live`).
+5. If the recorder is dead with live positions: `python -m tradeloop.kill_switch flatten-live --yes`.

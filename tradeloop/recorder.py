@@ -146,6 +146,59 @@ def build(cfg: dict, api, today: date, **adapter_kw):
     return Recorder(cfg, md, Store(cfg["db_path"]), today), md
 
 
+def load_symbols(api) -> dict:
+    """Groww's instrument list as order-side symbols (trading symbol, tick, freeze quantity). Tests replace this."""
+    import pandas as pd
+
+    from tradeloop.brokers import groww_orders as g
+    from tradeloop.brokers.groww import INSTRUMENT_CSV_URL
+
+    return g.symbols_from_rows(pd.read_csv(INSTRUMENT_CSV_URL, dtype={"exchange_token": str}, low_memory=False))
+
+
+def live_traders(cfg: dict, rec: Recorder, md: MarketData, api) -> list:
+    """Live strategies from cfg["live"], through the Groww adapter. Off unless `live.enabled`; no real order
+    is sent unless `live.armed` is also true (Ranga's switch). A setup problem is logged as an ALERT and
+    skipped: it must never stop the recording."""
+    live = cfg.get("live") or {}
+    if not live.get("enabled"):
+        return []
+    from tradeloop.brokers.groww_execution import GrowwExecution
+    from tradeloop.live_broker import LiveBroker
+    from tradeloop.lot_sizes import default_lot_sizes
+    from tradeloop.paper import PaperTrader
+    from tradeloop.paper_store import PaperStore
+
+    armed = live.get("armed") is True
+    try:
+        symbols = load_symbols(api)
+    except Exception:
+        log.exception("ALERT live trading not started: could not load Groww's instrument list")
+        return []
+    table = default_lot_sizes()
+    lot_size = lambda i: symbols[i].lot_size if i in symbols else table.lot_size(i)
+    store = PaperStore(live.get("db", "data/live.db"))
+    traders = []
+    for path in live.get("strategies", []):
+        try:
+            ex = GrowwExecution(api, symbols, armed=armed)
+            ex.cancel_orphans()
+            broker = LiveBroker(ex, symbols, stale_ms=int(cfg.get("paper_stale_ms", 10_000)),
+                                max_wait_minutes=float(live.get("order_wait_minutes", 2)),
+                                buffer_ticks=int(live.get("buffer_ticks", 4)))
+            t = PaperTrader(Path(path), store, max_lots=int(live.get("max_lots", 1)), lot_size=lot_size,
+                            kill_file=Path(cfg.get("kill_file", "data/KILL")), broker=broker)
+        except Exception:
+            log.exception("ALERT live strategy %s not started", path)
+            continue
+        rec.bus.subscribe(Topic.TICK, t.on_tick)
+        traders.append(t)
+    if traders:
+        log.warning("ALERT LIVE %s: %s", "ARMED, REAL ORDERS WILL BE SENT" if armed else "not armed, orders are refused",
+                    ", ".join(t.strategy_id for t in traders))
+    return traders
+
+
 def paper_traders(cfg: dict, rec: Recorder, md: MarketData) -> list:
     """Paper strategies from cfg["paper"], listening to the recorder's ticks. A paper setup
     problem is logged and skipped: it must never stop the recording."""
@@ -201,10 +254,11 @@ def main():
     except UnknownYear as e:
         log.warning("%s; recording anyway (a wasted holiday beats a missed trading day)", e)
 
-    rec, md = build(cfg, login(), today)
+    api = login()
+    rec, md = build(cfg, api, today)
     for problem in calendar_problems(cal, md.instruments(), cfg["underlyings"]):
         log.warning("Calendar check: %s", problem)
-    traders = paper_traders(cfg, rec, md)
+    traders = paper_traders(cfg, rec, md) + live_traders(cfg, rec, md, api)
     if traders:
         from tradeloop.reconcile import startup_check
 

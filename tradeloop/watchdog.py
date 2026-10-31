@@ -36,6 +36,7 @@ from tradeloop.kill_switch import KILL_FILE, active, request
 log = logging.getLogger("watchdog")
 HEARTBEAT_FILE = Path("data/heartbeat")
 HEARTBEAT_MAX_AGE_S = 60
+UNREADABLE_LIMIT = 3
 
 
 def _wall_ms() -> int:
@@ -58,6 +59,7 @@ class Watchdog:
         self.cal, self.clock = calendar or default_calendar(), clock_ms
         self.last_tick_ms = clock_ms()
         self._untagged_before: set = set()
+        self._unreadable: dict[str, int] = {}
 
     def on_tick(self, _tick: Tick) -> None:
         self.last_tick_ms = self.clock()
@@ -81,7 +83,19 @@ class Watchdog:
                 out.append(f"max loss: {t.strategy_id} is down Rs {loss:,.0f} on open positions "
                            f"(limit Rs {self.max_open_loss:,.0f})")
         known = {(t.strategy_id, p.instrument) for t, positions in held for p in positions}
-        unknown = {(t.strategy_id, p.instrument) for t in self.traders for p in t.broker.positions()} - known
+        at_broker = set()
+        for t in self.traders:
+            try:
+                at_broker |= {(t.strategy_id, p.instrument) for p in t.broker.positions()}
+                self._unreadable[t.strategy_id] = 0
+            except Exception as e:           # a live broker can be unreachable; three misses in a row is a breach
+                n = self._unreadable[t.strategy_id] = self._unreadable.get(t.strategy_id, 0) + 1
+                if n <= UNREADABLE_LIMIT or n % 12 == 0:
+                    log.warning("cannot read %s positions from the broker (%d in a row): %s: %s",
+                                t.strategy_id, n, type(e).__name__, e)
+                if n == UNREADABLE_LIMIT:
+                    out.append(f"broker unreachable: cannot read {t.strategy_id} positions {n} times in a row")
+        unknown = at_broker - known
         for strategy_id, instrument in sorted(unknown & self._untagged_before, key=str):
             out.append(f"untagged position: {instrument} at the broker, unknown to {strategy_id} (Rule #1)")
         self._untagged_before = unknown
@@ -90,6 +104,11 @@ class Watchdog:
     def run_once(self) -> list[str]:
         self.heartbeat_file.parent.mkdir(parents=True, exist_ok=True)
         self.heartbeat_file.write_text(str(self.clock()))
+        for t in self.traders:
+            try:
+                getattr(t, "tend", lambda: None)()
+            except Exception:
+                log.exception("tending %s failed", t.strategy_id)
         breaches = self.check()
         if breaches and active(self.kill_file) is None:
             for b in breaches:
@@ -128,16 +147,22 @@ def check_heartbeat(cfg: dict, *, now_ms: int | None = None, cal: MarketCalendar
         age = float("inf")
     if age <= HEARTBEAT_MAX_AGE_S:
         return None
-    store = PaperStore(cfg.get("paper_db", "data/paper.db"))
+    ledgers = [(PaperStore(cfg.get("paper_db", "data/paper.db")), cfg.get("paper", []))]
+    live = cfg.get("live") or {}
+    if live.get("enabled"):
+        ledgers.append((PaperStore(live.get("db", "data/live.db")), live.get("strategies", [])))
     held = []
-    for p in cfg.get("paper", []):
-        sid = yaml.safe_load(Path(p).read_text())["strategy_id"]
-        held += store.rebuild_ledger(sid).positions()
+    for store, strategies in ledgers:
+        for p in strategies:
+            sid = yaml.safe_load(Path(p).read_text())["strategy_id"]
+            held += store.rebuild_ledger(sid).positions()
     text = f"watchdog heartbeat lost ({age:.0f}s old); recorder is not running"
     kill_file = Path(cfg.get("kill_file", KILL_FILE))
     if held and active(kill_file) is None:
         request(kill_file, text, now)
         text += f"; {len(held)} positions open, kill switch requested"
+        if live.get("enabled"):
+            text += "; if the recorder will not restart: python -m tradeloop.kill_switch flatten-live --yes"
     return "ALERT " + text
 
 

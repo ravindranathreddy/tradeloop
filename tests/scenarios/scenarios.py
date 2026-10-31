@@ -28,8 +28,10 @@ SID = "put_credit_spread"
 
 
 class Run:
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self, name: str, live: dict | None = None):
+        """live={"armed": bool, "paper": bool}: a live drill against the fake Groww exchange (the paper
+        strategy is dropped unless paper=True, so the two ledgers can be told apart)."""
+        self.name, self.live = name, live
         self.dir = Path(tempfile.mkdtemp(prefix=f"drill_{name}_"))
         self.kill_file = self.dir / "KILL"
         self.cfg = {
@@ -41,19 +43,29 @@ class Run:
             "watchdog": {"stale_seconds": 120, "max_open_loss": 20000, "interval": 0.2,
                          "heartbeat_file": str(self.dir / "hb")},
         }
+        if live:
+            if not live.get("paper"):
+                self.cfg["paper"] = []
+            self.cfg["live"] = {"enabled": True, "armed": live.get("armed", True), "db": str(self.dir / "live.db"),
+                                "strategies": [str(ROOT / "strategies/put_credit_spread.yaml")], "max_lots": 1}
         (self.dir / "config.yaml").write_text(yaml.safe_dump(self.cfg))
         self.log, self.codes = "", []
 
     # --- actions -----------------------------------------------------------------------
     def day(self, date: str = MON, until: str = "10:00", **spec) -> None:
-        spec = {"date": date, "until": until, **spec}
+        spec = {"date": date, "until": until, **({"groww": True} if self.live else {}), **spec}
         p = subprocess.run([sys.executable, str(Path(__file__).parent / "harness.py"), str(self.dir), json.dumps(spec)],
                            cwd=ROOT, capture_output=True, text=True, timeout=400)
         self.codes.append(p.returncode)
         self.log += f"\n=== {date} ===\n{p.stdout}{p.stderr}"
 
     def settle(self, close: float, day: str = TUE) -> list[str]:
-        out = settle({"paper": self.cfg["paper"]}, self.store(), FakeApi(close), date.fromisoformat(day))
+        strategies = self.cfg["live"]["strategies"] if self.live else self.cfg["paper"]
+        out = settle({"paper": strategies}, self.store(), FakeApi(close), date.fromisoformat(day))
+        if self.live:                                     # Groww drops expired contracts
+            d = self.groww()
+            d["net"] = {k: v for k, v in d["net"].items() if not k.startswith("NIFTY26N03")}
+            (self.dir / "groww.json").write_text(json.dumps(d))
         self.log += "\n" + "\n".join(out)
         return out
 
@@ -67,7 +79,21 @@ class Run:
 
     # --- what is left behind ---------------------------------------------------------------
     def store(self) -> PaperStore:
-        return PaperStore(self.dir / "paper.db")
+        return PaperStore(self.dir / ("live.db" if self.live else "paper.db"))
+
+    def groww(self) -> dict:
+        """The fake exchange's state: placed (every order sent), net positions, orders."""
+        return json.loads((self.dir / "groww.json").read_text())
+
+    def sent(self) -> list[tuple]:
+        return [(o["symbol"], o["side"], o["type"]) for o in self.groww()["placed"]]
+
+    def fix_groww(self) -> None:
+        """Ranga sorts out the account: stray positions and foreign orders removed."""
+        d = self.groww()
+        d["net"] = {k: v for k, v in d["net"].items() if not k.startswith("NIFTY26N0320000")}
+        d["orders"] = {k: v for k, v in d["orders"].items() if v["order_reference_id"] != "manualorder1"}
+        (self.dir / "groww.json").write_text(json.dumps(d))
 
     def fills(self) -> list[tuple]:
         return self.store().query("SELECT instrument, side, qty, price FROM fills ORDER BY ts_ms, rowid")
@@ -126,8 +152,69 @@ def expiry_far_below(r: Run):
     r.settle(23500.0)
 
 
+# --- live drills: the same days against a fake Groww exchange ---------------------------------
+
+LIVE = {"armed": True}
+
+
+def live_normal_week(r: Run):
+    r.day(MON, "10:00")
+    r.day(TUE, "09:45")
+    r.settle(25000.0)
+
+
+def live_unarmed(r: Run):
+    r.day(MON, "09:45")
+
+
+def live_dead_feed(r: Run):
+    r.day(MON, "10:00", silent=["09:40", "09:50"])
+
+
+def live_manual_kill(r: Run):
+    r.day(MON, "09:50", cli_kill_at="09:35")
+
+
+def live_startup_mismatch(r: Run):
+    r.day(MON, "09:45")
+    r.day(TUE, "09:30", groww_stray={"20000": 65})
+    r.after_mismatch = r.kill()
+    r.fix_groww()
+    r.resume()
+    r.day(TUE, "09:30")
+
+
+def live_foreign_order(r: Run):
+    r.day(MON, "09:45", groww_foreign_order=True)
+    r.after_halt = r.kill()
+
+
+def live_groww_outage(r: Run):
+    r.day(MON, "10:10", groww_outage=["09:40", "09:50"])
+
+
+def live_recorder_crash(r: Run):
+    r.day(MON, "10:00", crash_at="09:40")
+    r.alert = r.heartbeat_check(MON, "09:50")
+    r.day(TUE, "09:30")
+
+
+def live_lost_response(r: Run):
+    r.day(MON, "09:50", groww_timeout_lands=True)
+
+
+def live_and_paper_together(r: Run):
+    r.day(MON, "10:00")
+    r.day(TUE, "09:45")
+
+
 SCENARIOS = {f.__name__: f for f in (normal_week, dead_feed, crash_move, manual_kill, startup_mismatch,
                                      recorder_crash, no_protection_liquidity, expiry_far_below)}
+LIVE_SCENARIOS = {f.__name__: f for f in (live_normal_week, live_unarmed, live_dead_feed, live_manual_kill,
+                                          live_startup_mismatch, live_foreign_order, live_groww_outage,
+                                          live_recorder_crash, live_lost_response, live_and_paper_together)}
+LIVE_FLAGS = {"live_unarmed": {"armed": False}, "live_and_paper_together": {"armed": True, "paper": True}}
+SCENARIOS |= LIVE_SCENARIOS
 
 
 def run_all(names=None) -> dict[str, Run]:
@@ -136,7 +223,7 @@ def run_all(names=None) -> dict[str, Run]:
     names = names or list(SCENARIOS)
 
     def go(name):
-        r = Run(name)
+        r = Run(name, {**LIVE, **LIVE_FLAGS.get(name, {})} if name in LIVE_SCENARIOS else None)
         SCENARIOS[name](r)
         return name, r
 

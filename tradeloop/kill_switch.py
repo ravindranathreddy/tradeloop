@@ -3,6 +3,7 @@
     python -m tradeloop.kill_switch kill [--reason "..."]   halt, cancel all, flatten
     python -m tradeloop.kill_switch status
     python -m tradeloop.kill_switch resume                  lift the halt (after you've looked)
+    python -m tradeloop.kill_switch flatten-live --yes      recorder not running: flatten the Groww account
 
 The command writes a request file (data/KILL). While it exists the risk gate rejects every
 strategy order (nothing new, nothing re-opened) and the paper trader cancels what is working and
@@ -82,12 +83,21 @@ def main():
     from tradeloop.paper_store import PaperStore
 
     p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["kill", "status", "resume"])
+    p.add_argument("command", choices=["kill", "status", "resume", "flatten-live"])
+    p.add_argument("--yes", action="store_true", help="flatten-live: really send the exit orders")
+    p.add_argument("--even-if-running", action="store_true", help="flatten-live: even though the recorder looks alive")
     p.add_argument("--config", default="config.yaml")
     p.add_argument("--reason", default="manual")
     a = p.parse_args()
     cfg = yaml.safe_load(Path(a.config).read_text())
     path = Path(cfg.get("kill_file", KILL_FILE))
+    if a.command == "flatten-live":
+        import sys
+
+        from tradeloop.live_kill import main as flatten_live_main
+
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        sys.exit(flatten_live_main(cfg, confirmed=a.yes, even_if_running=a.even_if_running))
     if a.command == "kill":
         request(path, a.reason)
         print(f"Kill requested ({a.reason}). Orders are blocked now; the recorder flattens paper "

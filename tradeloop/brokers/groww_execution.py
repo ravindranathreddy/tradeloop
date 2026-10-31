@@ -190,6 +190,28 @@ class GrowwExecution:
         """Today's orders in the account that are not ours (no 'tl' reference)."""
         return [r for r in self._all_orders() if not g.is_ours(r.get("order_reference_id"))]
 
+    def cancel_orphans(self) -> list[dict]:
+        """Our own orders still working at Groww that this process isn't tracking: sent by an earlier run
+        that died. Their fills would never reach the ledger, so they are cancelled (and reported); the
+        strategy sends a fresh order if it still wants one. Anything they filled before this shows up
+        as a position the ledger lacks, which startup reconciliation catches."""
+        known = {t.reference for t in self._tracked.values()}
+        out = []
+        for r in self._all_orders():
+            ref = r.get("order_reference_id")
+            if not g.is_ours(ref) or ref in known:
+                continue
+            try:
+                working = not g.order_status(r.get("order_status"), int(r.get("filled_quantity") or 0),
+                                             int(r.get("quantity") or 0)).is_final
+            except g.UnknownStatus:
+                working = True                                   # can't tell: cancelling is the safe side
+            if working and r.get("groww_order_id"):
+                log.error("ALERT order %s from an earlier run is still working at Groww: cancelling it", ref)
+                self._cancel_id(r["groww_order_id"])
+                out.append(r)
+        return out
+
     # --- internals ---------------------------------------------------------------------------
 
     def _send(self, t: _Tracked, params: dict) -> None:
