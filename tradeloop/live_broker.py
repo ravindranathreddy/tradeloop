@@ -66,6 +66,12 @@ class LiveBroker:
         if self.execution.working():
             self._poll(self._clock())
 
+    def reference_price(self, instrument: InstrumentId) -> float | None:
+        """Mid of the last book seen, any age (a reference for margin quotes, not for orders)."""
+        b = self._books.get(instrument)
+        prices = [p for p in (b.bid, b.ask) if p] if b else []
+        return sum(prices) / len(prices) if prices else None
+
     def fresh(self, instrument: InstrumentId) -> bool:
         book = self._books.get(instrument)
         return book is not None and self._clock() - book.recv_ms <= self._stale_ms

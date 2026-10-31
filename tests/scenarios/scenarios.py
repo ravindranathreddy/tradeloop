@@ -47,7 +47,8 @@ class Run:
             if not live.get("paper"):
                 self.cfg["paper"] = []
             self.cfg["live"] = {"enabled": True, "armed": live.get("armed", True), "db": str(self.dir / "live.db"),
-                                "strategies": [str(ROOT / "strategies/put_credit_spread.yaml")], "max_lots": 1}
+                                "strategies": [str(ROOT / "strategies/put_credit_spread.yaml")], "max_lots": 1,
+                                **{k: v for k, v in live.items() if k.startswith("margin_")}}
         (self.dir / "config.yaml").write_text(yaml.safe_dump(self.cfg))
         self.log, self.codes = "", []
 
@@ -203,6 +204,14 @@ def live_lost_response(r: Run):
     r.day(MON, "09:50", groww_timeout_lands=True)
 
 
+def live_margin_short(r: Run):
+    r.day(MON, "09:50", groww_available=70_000)          # enough to buy the protection, not to carry the short
+
+
+def live_margin_unreadable(r: Run):
+    r.day(MON, "09:50", groww_margin_down=True)
+
+
 def live_and_paper_together(r: Run):
     r.day(MON, "10:00")
     r.day(TUE, "09:45")
@@ -212,8 +221,10 @@ SCENARIOS = {f.__name__: f for f in (normal_week, dead_feed, crash_move, manual_
                                      recorder_crash, no_protection_liquidity, expiry_far_below)}
 LIVE_SCENARIOS = {f.__name__: f for f in (live_normal_week, live_unarmed, live_dead_feed, live_manual_kill,
                                           live_startup_mismatch, live_foreign_order, live_groww_outage,
-                                          live_recorder_crash, live_lost_response, live_and_paper_together)}
-LIVE_FLAGS = {"live_unarmed": {"armed": False}, "live_and_paper_together": {"armed": True, "paper": True}}
+                                          live_recorder_crash, live_lost_response, live_and_paper_together,
+                                          live_margin_short, live_margin_unreadable)}
+LIVE_FLAGS = {"live_unarmed": {"armed": False}, "live_and_paper_together": {"armed": True, "paper": True},
+              "live_margin_short": {"margin_min_free": 0}}       # the entry floor off, so the protection does get bought
 SCENARIOS |= LIVE_SCENARIOS
 
 

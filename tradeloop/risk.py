@@ -6,9 +6,10 @@ Checks, in order:
   max lots    no single order larger than `max_lots`
   fresh data  no order without a fresh order book for the instrument (rule 11: no new
               entries on stale ticks); the strategy sees a rejection, never a silent drop
+  margin      live only: `margin(order)` returns a reason to refuse, or None (margin_guard.py)
 
 Rejections are reported as REJECTED_RISK order updates and logged as alerts.
-Capital buckets, margin and daily loss limits come with live trading.
+Capital buckets and the margin check are in margin_guard.py; a daily loss limit is not built (see LIVE_CHECKLIST.md).
 """
 from __future__ import annotations
 
@@ -25,7 +26,8 @@ log = logging.getLogger("risk")
 class RiskGate:
     def __init__(self, inner: Execution, *, max_lots: int, lot_size: Callable[[InstrumentId], int],
                  fresh: Callable[[InstrumentId], bool], clock_ms: Callable[[], int],
-                 halted: Callable[[], bool] = lambda: False):
+                 halted: Callable[[], bool] = lambda: False, margin: Callable[[Order], str | None] = lambda o: None):
+        self.margin = margin
         self.inner, self.max_lots, self.lot_size, self.fresh, self.clock = inner, max_lots, lot_size, fresh, clock_ms
         self.halted = halted
         self._update_handlers: list[Callable[[OrderUpdate], None]] = []
@@ -50,7 +52,7 @@ class RiskGate:
             return f"{lots} lots exceeds the limit of {self.max_lots}"
         if not self.fresh(order.instrument):
             return "no fresh order book (stale data)"
-        return None
+        return self.margin(order)
 
     def cancel(self, client_ref: str) -> None:
         self.inner.cancel(client_ref)

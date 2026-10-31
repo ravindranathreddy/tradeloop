@@ -21,6 +21,8 @@ across days) that fills orders against the fake feed's order book. More keys:
   groww_stray: {strike: qty} Groww holds a position the ledger never booked
   groww_foreign_order        Groww holds an order that did not come from the bot
   groww_timeout_lands        the first order's response times out, though Groww has the order
+  groww_available: rupees    free option-selling margin (default 300000)
+  groww_margin_down          the margin endpoints fail
 """
 import json
 import os
@@ -202,6 +204,24 @@ if SPEC.get("groww"):
         def get_positions_for_user(self, **kw):
             self._down()
             return super().get_positions_for_user(**kw)
+
+        def get_order_margin_details(self, segment, orders, timeout=None):
+            self._down()
+            if SPEC.get("groww_margin_down"):
+                raise ConnectionError("margin endpoint down")
+            sells = [o for o in orders if o["transaction_type"] == "SELL"]
+            buys = [o for o in orders if o["transaction_type"] == "BUY"]
+            total = (60328.0 if buys else 124714.0) if sells else sum(o["price"] * o["quantity"] for o in buys)
+            return {"total_requirement": total, "span_required": 0, "exposure_required": 0, "option_buy_premium": 0,
+                    "brokerage_and_charges": 0}
+
+        def get_available_margin_details(self, timeout=None):
+            self._down()
+            if SPEC.get("groww_margin_down"):
+                raise ConnectionError("margin endpoint down")
+            free = float(SPEC.get("groww_available", 300_000))
+            return {"clear_cash": free, "net_margin_used": 0,
+                    "fno_margin_details": {"option_sell_balance_available": free, "option_buy_balance_available": free}}
 
     EX = Exchange()
     for k, q in SPEC.get("groww_stray", {}).items():

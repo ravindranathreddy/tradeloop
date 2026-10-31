@@ -166,6 +166,7 @@ def live_traders(cfg: dict, rec: Recorder, md: MarketData, api) -> list:
     from tradeloop.brokers.groww_execution import GrowwExecution
     from tradeloop.live_broker import LiveBroker
     from tradeloop.lot_sizes import default_lot_sizes
+    from tradeloop.margin_guard import MarginGuard
     from tradeloop.paper import PaperTrader
     from tradeloop.paper_store import PaperStore
 
@@ -188,6 +189,12 @@ def live_traders(cfg: dict, rec: Recorder, md: MarketData, api) -> list:
                                 buffer_ticks=int(live.get("buffer_ticks", 4)))
             t = PaperTrader(Path(path), store, max_lots=int(live.get("max_lots", 1)), lot_size=lot_size,
                             kill_file=Path(cfg.get("kill_file", "data/KILL")), broker=broker)
+            t.gate.margin = MarginGuard(
+                api, symbols, positions=t.ledger.positions,
+                price=lambda i, t=t, b=broker: b.reference_price(i) or (t.quotes[i].close if i in t.quotes else None),
+                buffer=float(live.get("margin_buffer", 1.5)),
+                max_margin=None if live.get("max_margin", 100_000) is None else float(live.get("max_margin", 100_000)),
+                min_free=float(live.get("margin_min_free", 90_000))).check
         except Exception:
             log.exception("ALERT live strategy %s not started", path)
             continue

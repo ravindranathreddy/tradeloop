@@ -167,3 +167,17 @@ def test_live_and_paper_run_side_by_side_without_touching_each_other(runs):
     assert len(r.sent()) == 2                                                           # only the live trader reached Groww
     assert r.kill() is None
     assert "Reconciled: ledger and broker agree on 2 live positions" in r.log
+
+
+def test_live_margin_too_low_for_the_short_buys_the_protection_then_sells_it_back(runs):
+    r = runs["live_margin_short"]
+    assert r.sent() == [(LLONG, "BUY", "LIMIT"), (LLONG, "SELL", "LIMIT")]              # no short was ever sent
+    assert flat(r) and groww_flat(r) and r.kill() is None
+    assert "free margin Rs 70,000 is below" in r.log and "ALERT risk rejected SELL" in r.log
+    assert -r.ledger().realised_pnl() / 100 < 500                                       # the round trip costs spread + charges only
+
+
+def test_live_no_margin_figure_means_no_orders_at_all(runs):
+    r = runs["live_margin_unreadable"]
+    assert r.sent() == [] and r.fills() == [] and r.ledger().positions() == []
+    assert "margin check failed (ConnectionError" in r.log

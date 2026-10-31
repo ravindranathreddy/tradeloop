@@ -142,7 +142,11 @@ check, not the main evidence.
    polling, `tend()` so a kill works with the feed dead), `live_traders()` in recorder.py (config `live:`
    enabled+armed both false), `live_kill.py` (`kill_switch flatten-live --yes`, refuses while the recorder
    is alive), reconciliation also checks Groww positions and untagged orders, watchdog trips on 3 failed
-   position reads and its cron heartbeat check covers live positions. 10 live scenario drills against a
+   position reads and its cron heartbeat check covers live positions.
+   Pre-trade margin check (`margin_guard.py`, plugged into RiskGate as `gate.margin`): quotes the whole
+   book as one basket, refuses without enough free margin (extra x 1.5 for expiry day), above a
+   Rs 100k book cap (so a naked short can't pass), or without Rs 90k free to start a spread; closing
+   orders are never refused; no margin figure means no new risk. Numbers are `live:` in config.yaml. 10 live scenario drills against a
    fake Groww exchange (`tests/scenarios`). The drills found two real bugs (a failing cancel_all lost the
    kill; the heartbeat check ignored live positions): both fixed with regression tests. Never set
    `live.armed: true` in a commit.

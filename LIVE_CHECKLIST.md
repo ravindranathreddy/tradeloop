@@ -46,6 +46,15 @@ Status: `open` = not yet seen, `checked` = observed (add date and what happened)
   assumed). Plan: Rs 2 lakh liquid fund pledged plus Rs 1 lakh cash. Test with a small pledge in the
   real account and read the margin credit.
 
+- **Margin check inputs** (open). `margin_guard.py` quotes the whole book as one basket and reads
+  `option_sell_balance_available` as the free margin. Check on the first real order that (a) the quote
+  for the book with the long put held matches what Groww then actually blocks, (b) that balance field
+  is what Groww enforces, and (c) pledged liquid-fund collateral shows up in it (after the haircut).
+  If any of those differ, adjust `margin_buffer` / the field, not the guard's structure.
+- **Daily / weekly loss limit** (open decision, not built). Today a loss is limited by the spread's
+  structure (about Rs 31.5k per lot), the watchdog's open-loss kill (`max_open_loss`, Rs 20k) and one
+  lot. A limit across weeks (stop entering after cumulative live loss of Rs X) needs Ranga's number.
+
 ## Positions and the account
 
 - **Carried-forward positions** (open). How an open position is reported (`quantity`, `net_price`,
