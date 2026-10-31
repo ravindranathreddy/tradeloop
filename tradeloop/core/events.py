@@ -29,6 +29,7 @@ class Event:
     name: str
     effect: date         # first Indian session that can react
     source: str          # official | news | recalled
+    when: str = "in_session"   # in_session | after_close (in India)
 
 
 def _open(d: date) -> bool:
@@ -58,7 +59,7 @@ class EventCalendar:
                 raise ValueError(f"{raw['date']}: when must be one of {WHEN}")
             d = raw["date"]
             effect = raw.get("effect") or (d if when == "in_session" and _open(d) else _next_open(d))
-            out.append(Event(d, raw["kind"], raw["name"], effect, raw["source"]))
+            out.append(Event(d, raw["kind"], raw["name"], effect, raw["source"], when))
         return cls(out)
 
     def between(self, start: date, end: date, kinds: set[str] | None = None) -> list[Event]:

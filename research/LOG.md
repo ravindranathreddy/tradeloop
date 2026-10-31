@@ -330,3 +330,25 @@ Held-out 2025-26 only if it passes: kept total at least 85% of the base's.
 Also reported, not decisive: the same rule using only events whose date is verified
 (source official or news), to show whether the 26 unchecked dates change the answer; and
 skipped weeks the base won. Variants tried: 1.
+
+## Result: event filter, development 2020-2024 (31 Oct 2026)
+
+`research/event_filter_study.py`, NIFTY, 260 weeks, Rs per lot after charges and slippage.
+
+| events used | weeks skipped | kept total | big losses skipped | weeks the base won, skipped | verdict |
+|---|---|---|---|---|---|
+| all 109 | 54 (21%) | Rs 19,120 (43%) | 0 of 7 | 49, worth Rs 29,977 | FAIL (a, b) |
+| verified dates only | 41 (16%) | Rs 25,198 (57%) | 0 of 7 | 37, worth Rs 22,090 | FAIL (a, b) |
+
+Reading: as expected before running, none of the 7 big-loss weeks contained a scheduled event
+after entry: they came from shocks nobody scheduled (Mar 2020, Feb 2022, Sep 2020...). The
+unchecked dates do not matter: the verdict is the same with or without them. Event weeks are
+also good weeks for the spread: premiums are rich going into an event and the move is
+usually smaller than priced, so skipping them gave up 57% of the profit while removing no
+big loss.
+Conclusion: no event filter. Held-out period not opened (variants tried: 1; 6 filters or
+variants across the whole loss-reduction series). The 26 unchecked dates can wait: nothing
+depends on them now. Calendar kept for later research (events.yaml, core/events.py).
+Pattern across all five tests (vol filters x2, expected-move strike, early exit, events): every
+way of avoiding the big losses costs more premium than it saves, because the spread's income
+is largely a payment for bearing exactly those risks. The remaining lever is size, not rules.
