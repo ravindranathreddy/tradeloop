@@ -247,3 +247,38 @@ Conclusion: no volatility filter. The held-out period was not opened (variants t
 Not tried, and not to be tuned now: other thresholds, a sizing rule (smaller lots at high IV
 instead of skipping). A sizing rule is the one idea this result points at; it needs its
 own pre-registration. The big-loss risk stays as designed: capped at Rs 14-27k per lot.
+
+## Pre-registration: two ways to cut big losses without skipping weeks (31 Oct 2026, before running)
+
+Follows the volatility-filter result: high-IV weeks earn most of the profit, so skipping them
+fails. Both ideas below keep trading every week. Both came from reasoning, before the loss
+dates were looked at again; but the 7 worst weeks of 2020-24 had already been seen in the
+filter study (Sep 2020, Mar 2020 x2, Mar 2021, Jan 2022, Feb 2022, May 2022), so treat this
+as less clean than a first look. Base: the frozen spread, NIFTY 2020-2024, 260 weeks,
+Rs per lot after charges and slippage.
+
+Test 1, strike distance scaled to the expected move. Expected move EM% = ATM IV at the 09:20
+entry x sqrt(time to expiry in years). Short put distance = k x EM%, never closer than 2.5%
+and never further than 4.0%; protection stays 2.0% further out (same width, so the cap on
+the loss is about the same). k is fixed from entry data alone, with no P&L: the median over
+2020-24 of 2.5 / EM%, so a median week stays at 2.5% and jumpier weeks move out. One setting.
+Strikes are the nearest listed, as the strategy already picks them.
+
+Test 2, early exit. Base strikes. While holding, if the index is within 1.0% of the sold strike
+(index <= strike x 1.01 for a put) at any minute of the session: buy back the short, then sell
+the protection, at market with the usual slippage. No re-entry that week. One setting.
+
+Each is judged alone against the base. PASS in development needs all of:
+  (a) the loss in the base's big-loss weeks (net < -Rs 5,000) shrinks by at least 40%;
+  (b) total net P&L over all weeks is at least 90% of the base's;
+  (c) the worst single week is no worse than the base's.
+Reported too, not decisive: weeks changed, weeks where the rule hurt, and for test 2 the
+number of exits and how many were in weeks the base won ("false alarms").
+A rule that passes is judged once on 2025-26 (already opened once; calm period): total net
+at least 85% of the base's Rs 40,988. Then paper trading is the unseen test. Combining the
+two is a third variant and needs a new pre-registration. Variants tried: 2.
+
+Test 3, event filter (planned, not yet testable). Needs an event calendar built from published
+schedules and checked by Ranga: RBI policy dates, Union Budget, US Fed meetings, election
+result days. Rule to pre-register once it exists: skip a week when an event falls between
+entry and expiry. Must also say how many of the weeks it skips are weeks the base won.
