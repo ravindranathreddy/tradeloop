@@ -97,3 +97,44 @@ def test_days_follow_ist_not_utc(tmp_path):
     store.conn.isolation_level = None
     archive_day(store.conn, D1, tmp_path / "archive")
     assert pd.read_parquet(tmp_path / "archive" / "2026-10-26" / "ltp.parquet")["ltp"].tolist() == [2.0]
+
+
+# --- chain.db: same command, same day folder ---------------------------------------------
+
+def chain_db(tmp_path, days=(D1, D2)):
+    from tradeloop.chain_recorder import SCHEMA
+
+    path = tmp_path / "chain.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(SCHEMA)
+    for d in days:
+        for i in range(3):
+            ts = ms(d, 9, 15 + i)
+            conn.execute("INSERT INTO chain VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (str(CE), ts, 25500.0, 100.0 + i, 1000.0, 50000.0, 12.5, 0.4, 0.001, -3.0, 5.0, 0.1))
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_chain_db_archives_next_to_the_tick_files(db, tmp_path):
+    ticks, out = db
+    chain = chain_db(tmp_path)
+    before = read_day("chain", D1, chain, "/nonexistent")
+
+    archive(ticks, out, today=D2)
+    done = archive(chain, out, today=D2)
+
+    assert done == {D1: {"chain": 3}}
+    assert sorted(f.name for f in (out / "2026-10-26").iterdir()) == \
+        ["chain.parquet", "contracts.parquet", "depth.parquet", "ltp.parquet"]
+    assert days_in_db(sqlite3.connect(chain)) == [D2]                       # today stays in SQLite
+    pd.testing.assert_frame_equal(read_day("chain", D1, chain, out), before, check_dtype=False)
+    assert len(read_day("ltp", D1, ticks, out)) == 6                        # tick files untouched
+
+
+def test_chain_archive_is_safe_to_run_twice_and_an_untouched_table_is_not_an_error(tmp_path):
+    chain, out = chain_db(tmp_path), tmp_path / "archive"
+    archive(chain, out, today=D2)
+    assert archive(chain, out, today=D2) == {}
+    assert read_day("ltp", D1, chain, out).empty                            # chain.db has no ltp table

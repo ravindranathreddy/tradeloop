@@ -42,6 +42,7 @@ python -m tradeloop.recorder --config config.yaml   # runs until 15:41 IST (F&O 
 python -m tradeloop.chain_recorder                   # once a minute: full option chain (volume, OI, IV, Greeks)
 python -m tradeloop.health --db data/ticks.db       # after close: rows, empty minutes, disk headroom
 python -m tradeloop.archive                          # move earlier days to data/archive/<date>/*.parquet
+python -m tradeloop.archive --db data/chain.db       # same for the option chain (13x smaller as Parquet)
 ```
 
 Every recorded day is kept. The archive step moves each finished day out of SQLite into
@@ -55,6 +56,7 @@ Schedule it for every trading day (crontab on the machine that stays on, times i
 6 9 * * 1-5   cd ~/tradeloop && .venv/bin/python -m tradeloop.chain_recorder >> logs/chain_recorder.log 2>&1
 50 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.health >> logs/health.log 2>&1
 55 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.archive >> logs/archive.log 2>&1
+56 15 * * 1-5 cd ~/tradeloop && .venv/bin/python -m tradeloop.archive --db data/chain.db >> logs/archive_chain.log 2>&1
 0 16 * * 1-5  cd ~/tradeloop && .venv/bin/python -m tradeloop.paper settle >> logs/paper.log 2>&1
 ```
 

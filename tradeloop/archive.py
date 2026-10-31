@@ -1,8 +1,11 @@
 """Move finished days from SQLite to compressed Parquet. Every day is kept forever.
 
     python -m tradeloop.archive --db data/ticks.db --out data/archive
+    python -m tradeloop.archive --db data/chain.db --out data/archive
 
-Run after the recorder each day. For every day before today (IST) still in
+Works on whichever of the known tables the database has (ticks.db: ltp, depth, contracts;
+chain.db: chain), so both land in the same data/archive/<date>/ folder. Run after the
+recorders each day. For every day before today (IST) still in
 SQLite, it writes data/archive/<date>/<table>.parquet (zstd), reads the files
 back to check row counts, and only then deletes that day from SQLite. SQLite
 reuses the freed pages, so the database stays about one day in size.
@@ -30,6 +33,7 @@ TABLES = {
     "ltp": (["instrument", "ts_ms"], "ts"),
     "depth": (["instrument", "ts_ms"], "ts"),
     "contracts": (["session_date", "instrument"], "session"),
+    "chain": (["instrument", "ts_ms"], "ts"),            # chain.db: option chain once a minute
 }
 
 
@@ -49,10 +53,19 @@ def _where(kind: str, d: date) -> tuple[str, tuple]:
     return "ts_ms >= ? AND ts_ms < ?", day_bounds_ms(d)
 
 
+def tables_in(conn: sqlite3.Connection) -> dict[str, tuple]:
+    """The known tables this database actually has."""
+    have = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    return {t: spec for t, spec in TABLES.items() if t in have}
+
+
 def days_in_db(conn: sqlite3.Connection) -> list[date]:
     ist_offset_ms = 330 * 60 * 1000
-    days = {date.fromisoformat(r[0]) for r in conn.execute("SELECT DISTINCT session_date FROM contracts")}
-    for table in ("ltp", "depth"):
+    tables = tables_in(conn)
+    days = set()
+    if "contracts" in tables:
+        days = {date.fromisoformat(r[0]) for r in conn.execute("SELECT DISTINCT session_date FROM contracts")}
+    for table in (t for t, (_, kind) in tables.items() if kind == "ts"):
         for (n,) in conn.execute(f"SELECT DISTINCT (ts_ms + ?) / 86400000 FROM {table}", (ist_offset_ms,)):
             days.add(date(1970, 1, 1) + timedelta(days=n))
     return sorted(days)
@@ -76,7 +89,7 @@ def archive_day(conn: sqlite3.Connection, d: date, out_dir: Path) -> dict[str, i
     moved = {}
     conn.execute("BEGIN IMMEDIATE")  # no writer can add rows for this day mid-way
     try:
-        for table, (key, kind) in TABLES.items():
+        for table, (key, kind) in tables_in(conn).items():
             where, args = _where(kind, d)
             df = pd.read_sql_query(f"SELECT * FROM {table} WHERE {where}", conn, params=args)
             if df.empty:
@@ -121,8 +134,9 @@ def read_day(table: str, d: date, db: str | Path, out_dir: str | Path) -> pd.Dat
         parts.append(pd.read_parquet(path))
     if Path(db).exists():
         conn = sqlite3.connect(str(db))
-        where, args = _where(kind, d)
-        parts.append(pd.read_sql_query(f"SELECT * FROM {table} WHERE {where}", conn, params=args))
+        if table in tables_in(conn):
+            where, args = _where(kind, d)
+            parts.append(pd.read_sql_query(f"SELECT * FROM {table} WHERE {where}", conn, params=args))
         conn.close()
     parts = [p for p in parts if not p.empty]
     if not parts:
