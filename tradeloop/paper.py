@@ -32,7 +32,7 @@ from tradeloop.core.ids import InstrumentId
 from tradeloop.core.market_calendar import IST, default_calendar
 from tradeloop.core.types import Fill, Order, OrderUpdate, Position, Tick
 from tradeloop.engine import Engine, Quote
-from tradeloop.kill_switch import active as kill_active, flatten
+from tradeloop.kill_switch import active as kill_active, flatten_step
 from tradeloop.lot_sizes import default_lot_sizes
 from tradeloop.paper_broker import PaperBroker
 from tradeloop.paper_store import PaperStore
@@ -94,9 +94,11 @@ class PaperTrader:
                         clock_ms=clock_ms, halted=lambda: self.halted)
         self.gate = gate
         self.kill_file, self.halted = kill_file, False
-        self._killed_ms: int | None = None         # the kill request already flattened
+        self._killed_ms: int | None = None         # the kill request already acted on
         self._kill_check_ms = 0
+        self._flattening, self._attempts = False, {}
         execution = _Recorded(gate, store, clock_ms)
+        self._direct = _Recorded(self.broker, store, clock_ms)
         self.ledger = store.rebuild_ledger(self.strategy_id)
         self.engine = Engine(None, execution, self.ledger, strategy_id=self.strategy_id, config_version=self.version,
                              lot_size=self.lot_size, working_orders=self.broker.working)
@@ -111,22 +113,34 @@ class PaperTrader:
         log.info("%s (config %s): %d open positions from earlier days", self.strategy_id, self.version, len(held))
 
     def _check_kill(self) -> None:
-        """At most once a second: halt on a kill request and flatten once per request. Orders go
-        straight to the paper broker, past the gate (which is now closed) and the strategy."""
+        """At most once a second: halt on a kill request, cancel what is working, then step towards
+        flat on each check until the ledger is empty. Orders go straight to the paper broker,
+        past the gate (now closed) and the strategy."""
         now = self.clock()
         if self.kill_file is None or now - self._kill_check_ms < 1000:
             return
         self._kill_check_ms = now
         req = kill_active(self.kill_file)
         self.halted = req is not None
-        if req and req["requested_ms"] != self._killed_ms:
-            self._killed_ms = req["requested_ms"]
+        if req is None:
+            self._flattening = False
+        elif req["requested_ms"] != self._killed_ms:
+            self._killed_ms, self._attempts = req["requested_ms"], {}
             if not req.get("flatten", True):
                 log.warning("ALERT halted (%s): %s places no orders until resumed", req["reason"], self.strategy_id)
                 return
             log.warning("ALERT kill switch (%s): flattening %s", req["reason"], self.strategy_id)
-            flatten(_Recorded(self.broker, self.store, self.clock), self.ledger.positions(),
-                    strategy_id=self.strategy_id, config_version=self.version, request_ms=req["requested_ms"])
+            self._direct.cancel_all()
+            self._flattening = True
+        if not self._flattening:
+            return
+        positions = self.ledger.positions()
+        if not positions:
+            self._flattening = False
+            log.warning("ALERT kill switch: %s is flat", self.strategy_id)
+            return
+        flatten_step(self._direct, positions, self.broker.working(), strategy_id=self.strategy_id,
+                     config_version=self.version, request_ms=self._killed_ms, attempts=self._attempts)
 
     def on_tick(self, tick: Tick) -> None:
         self._check_kill()

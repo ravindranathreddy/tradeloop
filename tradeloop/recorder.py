@@ -210,7 +210,7 @@ def main():
         w = cfg.get("watchdog", {})
         dog = Watchdog(traders, kill_file=Path(cfg.get("kill_file", "data/KILL")),
                        heartbeat_file=Path(w.get("heartbeat_file", "data/heartbeat")),
-                       stale_seconds=float(w.get("stale_seconds", 120)),
+                       stale_seconds=float(w.get("stale_seconds", 120)), interval=float(w.get("interval", 5)),
                        max_open_loss=float(w.get("max_open_loss", 20000)))
         rec.bus.subscribe(Topic.TICK, dog.on_tick)
         dog.start()

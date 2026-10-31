@@ -1,5 +1,5 @@
-from tradeloop.kill_switch import active, clear, flatten, request
-from tradeloop.core.types import Position
+from tradeloop.kill_switch import active, clear, flatten_step, request
+from tradeloop.core.types import Order, OrderType, Position, Product, Side
 from tests.test_paper import EXP, LONG, MON, NIFTY, SHORT, PaperTrader, feed, lot, monday_ticks, ms, setup  # noqa: F401
 
 
@@ -55,16 +55,46 @@ class Recorder:
     def __init__(self):
         self.calls = []
 
-    def cancel_all(self):
-        self.calls.append("cancel_all")
-
     def place(self, order):
-        self.calls.append((order.side.value, order.qty, str(order.instrument)))
+        self.calls.append((order.side.value, order.qty, str(order.instrument), order.client_ref))
 
 
-def test_flatten_cancels_first_and_closes_shorts_before_longs():
-    ex = Recorder()
-    orders = flatten(ex, [Position(LONG, 65, 5.0), Position(SHORT, -65, 20.0)], strategy_id="s",
-                     config_version="v", request_ms=1)
-    assert ex.calls == ["cancel_all", ("BUY", 65, str(SHORT)), ("SELL", 65, str(LONG))]
-    assert [o.client_ref for o in orders] == ["kill-1-s-0", "kill-1-s-1"]
+def step(ex, positions, working=(), attempts=None):
+    return flatten_step(ex, positions, list(working), strategy_id="s", config_version="v", request_ms=1,
+                        attempts={} if attempts is None else attempts)
+
+
+def test_shorts_are_bought_back_before_the_protection_is_sold_and_only_on_confirmed_fills():
+    ex, attempts = Recorder(), {}
+    step(ex, [Position(LONG, 65, 5.0), Position(SHORT, -65, 20.0)], attempts=attempts)
+    assert [c[:3] for c in ex.calls] == [("BUY", 65, str(SHORT))]               # the sale of LONG waits
+    step(ex, [Position(LONG, 65, 5.0)], attempts=attempts)                       # short confirmed bought back
+    assert [c[:3] for c in ex.calls][1:] == [("SELL", 65, str(LONG))]
+
+
+def test_an_instrument_with_a_working_order_is_left_alone_and_a_lapsed_one_is_resent_under_a_new_ref():
+    ex, attempts = Recorder(), {}
+    short_pos = [Position(SHORT, -65, 20.0)]
+    working = [Order(SHORT, Side.BUY, 65, OrderType.MARKET, Product.CARRY, "s", "v")]
+    step(ex, short_pos, attempts=attempts)
+    step(ex, short_pos, working, attempts)                                       # still working: nothing new
+    assert len(ex.calls) == 1
+    step(ex, short_pos, attempts=attempts)                                       # lapsed unfilled: try again
+    assert [c[3] for c in ex.calls] == [f"kill-1-s-{SHORT}-1", f"kill-1-s-{SHORT}-2"]
+
+
+def test_protection_is_not_sold_while_the_short_cannot_fill(setup, tmp_path):
+    from tradeloop.core.types import Tick
+    from tests.test_paper import book
+    kf = tmp_path / "KILL"
+    t, store, clk = entered(setup, kf)
+    request(kf, "test", now_ms=clk.now)
+    only_long = []
+    for sec in (1, 3, 5):                                                    # the long's book is live, the short's is not
+        ts = ms(9, 30, sec)
+        only_long += [Tick(NIFTY, ts, ltp=25000.0, recv_ms=ts), book(LONG, ts, 4.9, 5.1)]
+    feed(t, clk, only_long)
+    assert {p.instrument: p.qty for p in t.ledger.positions()} == {LONG: 65, SHORT: -65}   # nothing sold, nothing naked
+    feed(t, clk, monday_ticks([(9, 31)]))                                    # the short's book returns
+    assert t.ledger.positions() == []
+    assert [f[1] for f in store.query("SELECT instrument, side FROM fills ORDER BY ts_ms, rowid")[2:]] == ["BUY", "SELL"]

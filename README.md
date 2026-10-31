@@ -32,6 +32,9 @@ Strikes: ATM ± 15 by default, re-centred if spot moves far. About 124 contracts
    cp .env.example .env    # paste your token and secret
    ```
 4. **Check the logic:** `pytest -q` (runs offline).
+   Scenario drills (the recorder, paper trader, watchdog, kill switch and reconciliation together,
+   on simulated days; about 2 minutes): `RUN_SCENARIOS=1 pytest tests/test_scenarios.py`. Run them
+   after changing anything in the safety layer.
 
 No static IP is needed for recording; it's only required later for placing orders.
 
