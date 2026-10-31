@@ -70,3 +70,18 @@ def test_an_existing_halt_is_not_overwritten(setup, tmp_path):
     t.broker.load_positions({OTHER: 65})
     startup_check([t], kf, TODAY)
     assert active(kf)["reason"] == "manual drill"
+
+
+def test_an_unreadable_broker_halts_instead_of_crashing(setup, tmp_path):
+    cfg_path, store, clk = setup
+    kf = tmp_path / "KILL"
+    t = PaperTrader(cfg_path, store, lot_size=lot, clock_ms=clk)
+
+    def boom():
+        raise KeyError("position in 'RELIANCE26NFUT', which is not an option we know")
+
+    t.broker.positions = boom
+    got = startup_check([t], kf, TODAY, now_ms=clk.now)
+    assert [m.kind for m in got] == ["unreadable"]
+    req = active(kf)
+    assert req["flatten"] is False and "could not read broker positions" in req["reason"]

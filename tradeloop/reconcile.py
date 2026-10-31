@@ -34,8 +34,8 @@ log = logging.getLogger("reconcile")
 
 @dataclass(frozen=True, slots=True)
 class Mismatch:
-    kind: str                # untagged | missing | quantity
-    instrument: InstrumentId
+    kind: str                # untagged | missing | quantity | unreadable
+    instrument: InstrumentId | None
     ledger_qty: int
     broker_qty: int
 
@@ -65,9 +65,17 @@ def compare(ledger: Iterable[Position], broker: Iterable[Position], today: date)
 
 
 def startup_check(traders: list, kill_file: Path, today: date, now_ms: int | None = None) -> list[Mismatch]:
-    """Compare every trader's ledger with its broker; on any mismatch halt all strategies."""
-    mismatches, awaiting = compare((p for t in traders for p in t.ledger.positions()),
-                                   (p for t in traders for p in t.broker.positions()), today)
+    """Compare every trader's ledger with its broker; on any mismatch halt all strategies.
+    If the broker's positions can't be read at all (an unknown contract, an ambiguous row, a
+    network error) that is a halt too: trading blind is worse than not trading."""
+    try:
+        broker = [p for t in traders for p in t.broker.positions()]
+    except Exception as e:
+        log.error("ALERT reconciliation could not read the broker's positions: %s: %s", type(e).__name__, e)
+        if active(kill_file) is None:
+            request(kill_file, f"reconciliation: could not read broker positions ({type(e).__name__}: {e})", now_ms, flatten=False)
+        return [Mismatch("unreadable", None, 0, 0)]
+    mismatches, awaiting = compare((p for t in traders for p in t.ledger.positions()), broker, today)
     for i in awaiting:
         log.warning("ALERT %s expired and still in the ledger: run `python -m tradeloop.paper settle`", i)
     if mismatches:

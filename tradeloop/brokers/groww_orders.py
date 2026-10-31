@@ -108,13 +108,14 @@ _TYPE = {OrderType.MARKET: "MARKET", OrderType.LIMIT: "LIMIT", OrderType.SL: "SL
 
 
 def check_order(order: Order, sym: Symbol) -> None:
-    """Our own sanity checks before anything is sent (design rule 11). Raises OrderRejected."""
+    """Our own sanity checks before anything is sent (design rule 11). Raises OrderRejected.
+
+    Deliberately no check of the buy_allowed / sell_allowed flags: whether a side is open is for
+    the exchange and Groww to say, and a check of ours must never be able to block an exit."""
     if order.qty % sym.lot_size:
         raise OrderRejected(f"{order.qty} is not a whole number of lots of {sym.lot_size}")
     if order.qty > sym.freeze_quantity:
         raise OrderRejected(f"{order.qty} exceeds the exchange freeze quantity {sym.freeze_quantity}")
-    if order.side is Side.BUY and not sym.buy_allowed or order.side is Side.SELL and not sym.sell_allowed:
-        raise OrderRejected(f"{order.side.value} is not allowed on {sym.trading_symbol}")
     for name, px in (("price", order.price), ("trigger", order.trigger)):
         if px is not None and (px <= 0 or abs(px / sym.tick_size - round(px / sym.tick_size)) > 1e-6):
             raise OrderRejected(f"{name} {px} is not a positive multiple of the tick {sym.tick_size}")
@@ -286,6 +287,10 @@ def margin_ok(required: MarginRequirement, available: MarginAvailable, buffer_pc
 
 
 # --- errors -------------------------------------------------------------------------------------
+
+def is_not_found(exc: BaseException) -> bool:
+    return type(exc).__name__ == "GrowwAPINotFoundException"
+
 
 def classify_error(exc: BaseException) -> str:
     """What to do after a failed call, by exception type name (so no SDK import is needed):

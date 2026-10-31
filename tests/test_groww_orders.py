@@ -83,9 +83,8 @@ def test_orders_that_fail_our_sanity_checks_are_never_built(bad, why):
         g.place_params(order(**bad), SYMS[SHORT])
 
 
-def test_a_side_the_exchange_does_not_allow_is_refused():
-    with pytest.raises(g.OrderRejected, match="not allowed"):
-        g.place_params(order(inst=LONG, side=Side.SELL), SYMS[LONG])
+def test_side_flags_never_block_an_order_so_an_exit_cannot_be_trapped():
+    g.place_params(order(inst=LONG, side=Side.SELL), SYMS[LONG])             # sell_allowed is 0 for this contract
 
 
 # --- status and updates in ------------------------------------------------------------------------
