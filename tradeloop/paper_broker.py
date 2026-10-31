@@ -91,6 +91,10 @@ class PaperBroker:
     def positions(self) -> list[Position]:
         return [Position(i, q, 0.0) for i, q in sorted(self._positions.items(), key=lambda kv: str(kv[0])) if q]
 
+    def load_positions(self, positions: dict[InstrumentId, int]) -> None:
+        """Positions carried over from earlier days (this broker's memory ends with the process)."""
+        self._positions = {i: q for i, q in positions.items() if q}
+
     def on_order_update(self, handler: Callable[[OrderUpdate], None]) -> None:
         self._update_handlers.append(handler)
 

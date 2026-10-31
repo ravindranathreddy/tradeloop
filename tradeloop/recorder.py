@@ -202,6 +202,9 @@ def main():
         log.warning("Calendar check: %s", problem)
     traders = paper_traders(cfg, rec, md)
     if traders:
+        from tradeloop.reconcile import startup_check
+
+        startup_check(traders, Path(cfg.get("kill_file", "data/KILL")), today)
         from tradeloop.watchdog import Watchdog
 
         w = cfg.get("watchdog", {})

@@ -131,7 +131,11 @@ check, not the main evidence.
    day (not only expiry day), nearest weekly expiry's contracts, overnight holds allowed. Next: Ranga's first real
    rule, found and tested by the research method below.
 7. Paper trading — built (`paper.py`, `paper_broker.py`, `paper_store.py`, `risk.py`), runs
-   inside the recorder. First strategy: put credit spread (passed its held-out test; memo
+   inside the recorder. Safety layer (all built, paper-only until the Groww `Execution`
+   adapter exists): `kill_switch.py` (data/KILL: halt, cancel, flatten), `watchdog.py` (stale
+   data, max open loss, untagged position, heartbeat), `reconcile.py` (startup check, halts
+   without flattening). Five ways of cutting the spread's big losses were tested and all
+   failed (research/LOG.md): the lever left is lot size. First strategy: put credit spread (passed its held-out test; memo
    and drop rules in research/memos/put_credit_spread.md). First paper trade Mon 2 Nov
    2026. 30 trades / 4+ weeks, then Ranga's review before any real money.
 

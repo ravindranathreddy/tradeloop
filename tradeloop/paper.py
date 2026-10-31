@@ -107,6 +107,7 @@ class PaperTrader:
         self.minute: int | None = None
         self.week: date | None = None
         held = self.ledger.positions()
+        self.broker.load_positions({p.instrument: p.qty for p in held})
         log.info("%s (config %s): %d open positions from earlier days", self.strategy_id, self.version, len(held))
 
     def _check_kill(self) -> None:
@@ -120,6 +121,9 @@ class PaperTrader:
         self.halted = req is not None
         if req and req["requested_ms"] != self._killed_ms:
             self._killed_ms = req["requested_ms"]
+            if not req.get("flatten", True):
+                log.warning("ALERT halted (%s): %s places no orders until resumed", req["reason"], self.strategy_id)
+                return
             log.warning("ALERT kill switch (%s): flattening %s", req["reason"], self.strategy_id)
             flatten(_Recorded(self.broker, self.store, self.clock), self.ledger.positions(),
                     strategy_id=self.strategy_id, config_version=self.version, request_ms=req["requested_ms"])

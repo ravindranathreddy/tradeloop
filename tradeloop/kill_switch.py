@@ -28,8 +28,10 @@ log = logging.getLogger("kill_switch")
 KILL_FILE = Path("data/KILL")
 
 
-def request(path: Path = KILL_FILE, reason: str = "manual", now_ms: int | None = None) -> dict:
-    req = {"requested_ms": now_ms or int(time.time() * 1000), "reason": reason}
+def request(path: Path = KILL_FILE, reason: str = "manual", now_ms: int | None = None, *, flatten: bool = True) -> dict:
+    """flatten=False halts only: no new orders, positions left as they are (used when we don't
+    know which side is right, e.g. the ledger and the broker disagree)."""
+    req = {"requested_ms": now_ms or int(time.time() * 1000), "reason": reason, "flatten": flatten}
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(json.dumps(req))
     return req
