@@ -200,7 +200,17 @@ def main():
     rec, md = build(cfg, login(), today)
     for problem in calendar_problems(cal, md.instruments(), cfg["underlyings"]):
         log.warning("Calendar check: %s", problem)
-    paper_traders(cfg, rec, md)
+    traders = paper_traders(cfg, rec, md)
+    if traders:
+        from tradeloop.watchdog import Watchdog
+
+        w = cfg.get("watchdog", {})
+        dog = Watchdog(traders, kill_file=Path(cfg.get("kill_file", "data/KILL")),
+                       heartbeat_file=Path(w.get("heartbeat_file", "data/heartbeat")),
+                       stale_seconds=float(w.get("stale_seconds", 120)),
+                       max_open_loss=float(w.get("max_open_loss", 20000)))
+        rec.bus.subscribe(Topic.TICK, dog.on_tick)
+        dog.start()
 
     def handle(sig, _frame):
         log.info("Signal %s, stopping", sig)

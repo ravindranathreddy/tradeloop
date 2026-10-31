@@ -22,3 +22,9 @@ paper:
   - strategies/put_credit_spread_sensex.yaml   # lower-confidence trial, see its memo
 paper_db: data/paper.db
 paper_max_lots: 1
+
+# Watchdog (tradeloop/watchdog.py): trips the kill switch on hard rules.
+watchdog:
+  stale_seconds: 120        # no tick this long, with positions open
+  max_open_loss: 20000      # rupees per strategy on open positions; one lot's worst case is Rs 14-27k
+  heartbeat_file: data/heartbeat
