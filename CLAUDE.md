@@ -145,7 +145,8 @@ check, not the main evidence.
    and needs `price` on every margin leg; Groww margins the NIFTY spread at ~Rs 60k (short put
    alone ~Rs 125k). Still unchecked: how an open or carried-forward position is reported
    (run `python -m tradeloop.groww_smoke` while a position exists), the expiry-day margin jump,
-   and the order/fill status sequences (needs a real order). First strategy: put credit spread (passed its held-out test; memo
+   and the order/fill status sequences (needs a real order). Everything unverified before live money, with how to check it, is listed in
+   LIVE_CHECKLIST.md: keep it current (mark items checked, with date and what was seen). First strategy: put credit spread (passed its held-out test; memo
    and drop rules in research/memos/put_credit_spread.md). First paper trade Mon 2 Nov
    2026. 30 trades / 4+ weeks, then Ranga's review before any real money.
 

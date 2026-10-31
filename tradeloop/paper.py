@@ -81,7 +81,7 @@ class _Recorded:
 class PaperTrader:
     def __init__(self, cfg_path: Path, store: PaperStore, *, max_lots: int = 1,
                  lot_size: Callable[[InstrumentId], int] | None = None, clock_ms: Callable[[], int] = _wall_ms,
-                 kill_file: Path | None = None):
+                 kill_file: Path | None = None, broker=None):
         self.cfg = yaml.safe_load(Path(cfg_path).read_text())
         if len(self.cfg["underlyings"]) != 1:
             raise ValueError("paper trading runs one underlying per strategy config")
@@ -89,7 +89,7 @@ class PaperTrader:
         self.index = InstrumentId.parse(self.cfg["underlyings"][0])
         self.store, self.clock = store, clock_ms
         self.lot_size = lot_size or default_lot_sizes().lot_size
-        self.broker = PaperBroker(self.lot_size, clock_ms=clock_ms)
+        self.broker = broker or PaperBroker(self.lot_size, clock_ms=clock_ms)     # a LiveBroker makes this a live trader
         gate = RiskGate(self.broker, max_lots=max_lots, lot_size=self.lot_size, fresh=self.broker.fresh,
                         clock_ms=clock_ms, halted=lambda: self.halted)
         self.gate = gate
