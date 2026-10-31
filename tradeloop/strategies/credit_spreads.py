@@ -18,7 +18,9 @@ short option.
 Config keys: lots, entry_time ("HH:MM"), enter_within_days (enter on the first trading
 day with 1..N calendar days to expiry, and only that day; e.g. 2 means Monday for a
 Tuesday expiry, Tuesday for a Thursday one),
-short_otm_pct, long_otm_pct (distance from the index at entry, in %), and for
+short_otm_pct, long_otm_pct (distance from the index at entry, in %), optional exit_within_pct
+(close the spread, short first, once the index comes within this % of the sold strike; off by
+default), and for
 `credit_spread` option_type (PE or CE).
 """
 from __future__ import annotations
@@ -41,7 +43,9 @@ class CreditSpread:
         self.long_pct = float(cfg["long_otm_pct"])
         if not 0 < self.short_pct < self.long_pct:
             raise ValueError("need 0 < short_otm_pct < long_otm_pct")
-        self.state = "waiting"                 # waiting -> buying_long -> selling_short -> holding | done
+        self.exit_pct = float(cfg["exit_within_pct"]) if cfg.get("exit_within_pct") else None
+        # waiting -> buying_long -> selling_short -> holding [-> closing_short -> closing_long] -> done
+        self.state = "waiting"
         self.long: InstrumentId | None = None
         self.short: InstrumentId | None = None
         self.day: date | None = None
@@ -68,6 +72,35 @@ class CreditSpread:
             self._after_long(ctx)
         elif self.state == "selling_short":
             self._after_short(ctx)
+        elif self.state == "holding":
+            self._check_exit(ctx)
+        elif self.state == "closing_short":
+            self._after_close_short(ctx)
+        elif self.state == "closing_long" and not self._working(ctx):
+            self.state = "done"
+
+    def _check_exit(self, ctx) -> None:
+        if self.exit_pct is None:
+            return
+        k, sign = self.short.strike, (-1 if self.kind is Kind.PE else 1)
+        if (ctx.index_price - k * (1 - sign * self.exit_pct / 100)) * sign < 0:
+            return                                          # not near the sold strike yet
+        self.state = "closing_short"
+        self._after_close_short(ctx)
+
+    def _after_close_short(self, ctx) -> None:
+        """Buy the short back first (retrying if it lapsed); only then sell the protection."""
+        if self._working(ctx):
+            return
+        positions = ctx.positions()
+        sold = -positions.get(self.short, 0)
+        if sold > 0:
+            ctx.order(self.short, Side.BUY, sold // ctx.lot_size(self.short))
+            return
+        held = positions.get(self.long, 0)
+        if held > 0:
+            ctx.order(self.long, Side.SELL, held // ctx.lot_size(self.long))
+        self.state = "closing_long"
 
     def _missed_first_day(self, ctx) -> bool:
         """Enter only on the first trading day inside the window, as the backtest does. A

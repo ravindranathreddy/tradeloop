@@ -282,3 +282,26 @@ Test 3, event filter (planned, not yet testable). Needs an event calendar built 
 schedules and checked by Ranga: RBI policy dates, Union Budget, US Fed meetings, election
 result days. Rule to pre-register once it exists: skip a week when an event falls between
 entry and expiry. Must also say how many of the weeks it skips are weeks the base won.
+
+## Result: expected-move strikes and early exit, development 2020-2024 (31 Oct 2026)
+
+`research/spread_variants_study.py`, NIFTY, 260 weeks, Rs per lot after charges and slippage.
+Base: total Rs 44,217, worst week -13,489, the 7 big-loss weeks sum to -67,815.
+Test 1 k = 1.804 (from entry data); 50% of weeks moved out, up to 4.0%.
+
+| variant | total P&L | big-loss weeks | worst week | weeks worse / better | verdict |
+|---|---|---|---|---|---|
+| base | 44,217 | -67,815 | -13,489 | | |
+| 1: strike = k x expected move | 37,279 (84%) | -33,288 (shrinks 51%) | -14,039 | 105 / 13 | FAIL (b, c) |
+| 2: exit within 1% of sold strike | 30,191 (68%) | -20,958 (shrinks 69%) | -10,164 | 46 / 12 | FAIL (b) |
+
+Reading: both do what they were meant to, and both pay for it. Test 1 halves the big losses
+for 16% of the profit, but gives up Rs 50,094 of premium across 105 weeks to save Rs 43,157
+in 13. Test 2 cuts them by 69% and the worst week by a quarter, but 46 exits in weeks the
+base won cost Rs 64,649 against Rs 50,622 saved: early exits are triggered by dips that
+recover. Neither is a free improvement. Test 1 fails (b) narrowly (84% vs the 90% line set
+in advance); the line is not moved after seeing the result.
+Held-out period not opened (variants tried: 2, plus the 2 in the filter study).
+If wanted, test 1 could run in paper as a separate strategy id: that is unseen data, and
+Ranga's call. Combining the two, a different width, or other thresholds are new variants.
+Code kept: `exit_within_pct` in the credit spread (off by default; paper config unchanged).

@@ -120,3 +120,29 @@ def test_enters_only_on_the_first_day_of_the_window():
     on_time = CreditSpread(CFG)
     on_time.on_minute(_Ctx(date(2026, 10, 27), thu, prev=date(2026, 10, 26)))
     assert on_time.state == "done" and on_time.day == date(2026, 10, 27)   # entered (no quotes, so no order)
+
+
+def test_early_exit_buys_the_short_back_first_then_sells_the_protection():
+    c = candles()
+    late = (c["ts_ms"] >= ms(EXP, 10, 0))
+    c.loc[late & (c["instrument"] == "NSE|NIFTY|IDX"), ["open", "high", "low", "close"]] = 24600.0   # < 24400 x 1.01
+    c.loc[late & (c["instrument"] == SHORT), ["open", "high", "low", "close"]] = 60.0
+    c.loc[late & (c["instrument"] == LONG), ["open", "high", "low", "close"]] = 20.0
+    fills = []
+    orig = engine_mod.Engine._on_fill
+    engine_mod.Engine._on_fill = lambda self, f: (fills.append(f), orig(self, f))
+    try:
+        rows = run_week({**CFG, "exit_within_pct": 1.0}, "v1", NIFTY, EXP, c, 24000.0, NO_SLIP, PREV)
+    finally:
+        engine_mod.Engine._on_fill = orig
+    assert [(str(f.instrument), f.side) for f in fills[2:]] == [(SHORT, Side.BUY), (LONG, Side.SELL)]
+    assert fills[2].ts_ms == ms(EXP, 10, 1) and fills[3].ts_ms >= fills[2].ts_ms
+    assert rows[-1]["settled_at_expiry"] == 0                              # flat before the close
+    assert sum(r["gross"] for r in rows) == (20 - 60 + 20 - 5) * 65        # -25 points
+
+
+def test_no_early_exit_unless_asked_for():
+    c = candles()
+    c.loc[(c["ts_ms"] >= ms(EXP, 10, 0)) & (c["instrument"] == "NSE|NIFTY|IDX"), ["close"]] = 24500.0
+    rows = run_week(CFG, "v1", NIFTY, EXP, c, 25000.0, NO_SLIP, PREV)
+    assert rows[-1]["settled_at_expiry"] == 2
