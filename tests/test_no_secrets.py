@@ -2,6 +2,7 @@
 from pathlib import Path
 
 PLACEHOLDERS = {"GROWW_API_KEY": "eyJ...your_totp_token...", "GROWW_TOTP_SECRET": "ABCDEF123456"}
+EMPTY = {"TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "GMAIL_USER", "GMAIL_APP_PASSWORD", "ALERT_EMAIL_TO"}
 
 
 def test_env_example_holds_only_placeholders():
@@ -9,5 +10,6 @@ def test_env_example_holds_only_placeholders():
     for line in example.read_text().splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             key, value = line.split("=", 1)
-            assert PLACEHOLDERS.get(key.strip()) == value.strip(), \
+            expected = "" if key.strip() in EMPTY else PLACEHOLDERS.get(key.strip())
+            assert expected == value.strip(), \
                 f"{key.strip()} in .env.example is not the placeholder; real values belong in .env"

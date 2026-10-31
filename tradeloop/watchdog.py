@@ -15,7 +15,7 @@ open triggers the kill switch too. Without open positions it only prints an aler
     python -m tradeloop.watchdog            # heartbeat check (cron)
 
 A breach calls `kill_switch.request`; the paper trader then halts and flattens. The reason is
-logged as an ALERT (phone alerts come later). Lift the halt with `kill_switch resume`.
+logged as an ALERT (tradeloop/alerts.py sends those to the phone). Lift the halt with `kill_switch resume`.
 """
 from __future__ import annotations
 
@@ -149,6 +149,12 @@ def main():
     alert = check_heartbeat(cfg)
     if alert:
         print(datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"), alert)       # cron mails any output
+        if cfg.get("alerts", {}).get("enabled"):
+            from tradeloop.alerts import Notifier
+
+            n = Notifier.from_env(cfg)
+            n.notify(alert.removeprefix("ALERT ").strip(), critical=True)
+            n.flush()
 
 
 if __name__ == "__main__":

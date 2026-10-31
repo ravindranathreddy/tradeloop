@@ -29,3 +29,11 @@ watchdog:
   stale_seconds: 120        # no tick this long, with positions open
   max_open_loss: 20000      # rupees per strategy on open positions; one lot's worst case is Rs 14-27k
   heartbeat_file: data/heartbeat
+
+# Phone alerts (tradeloop/alerts.py): every "ALERT" log line goes to Telegram, with Gmail as the
+# backup and for critical ones. Secrets are in .env. Test: python -m tradeloop.alerts test
+alerts:
+  enabled: true
+  dedupe_seconds: 300       # the same alert repeats at most this often
+  max_per_minute: 10        # a flood is cut off here
+  state_file: data/alert_state.json

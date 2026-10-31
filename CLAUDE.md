@@ -134,7 +134,9 @@ check, not the main evidence.
    inside the recorder. Safety layer (all built, paper-only until the Groww `Execution`
    adapter exists): `kill_switch.py` (data/KILL: halt, cancel, flatten), `watchdog.py` (stale
    data, max open loss, untagged position, heartbeat), `reconcile.py` (startup check, halts
-   without flattening). Five ways of cutting the spread's big losses were tested and all
+   without flattening), `alerts.py` (every `ALERT` log line to Telegram, Gmail as backup and for
+   critical ones; secrets in .env; `python -m tradeloop.alerts test`; verified on Ranga's phone and
+   inbox 31 Oct 2026; never let an alert failure block an order or a kill). Five ways of cutting the spread's big losses were tested and all
    failed (research/LOG.md): the lever left is lot size.
    Groww `Execution` adapter (mid-Nov plan): stages 1-3 done (`brokers/groww_orders.py`,
    `brokers/groww_execution.py`, `groww_smoke.py`). Unarmed by default (`armed=False` refuses every

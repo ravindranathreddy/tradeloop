@@ -36,6 +36,12 @@ Strikes: ATM ± 15 by default, re-centred if spot moves far. About 124 contracts
    on simulated days; about 2 minutes): `RUN_SCENARIOS=1 pytest tests/test_scenarios.py`. Run them
    after changing anything in the safety layer.
 
+Phone alerts: every `ALERT` log line (kill switch, watchdog, reconciliation, Groww gave up) goes to
+Telegram, with Gmail as the backup and for critical ones. Put the values from `.env.example` in
+`.env` (Telegram bot token and chat id from @BotFather; a Gmail app password, never the real
+password), then send a test with `python -m tradeloop.alerts test`. `alerts:` in config.yaml turns
+it on and sets the repeat window.
+
 No static IP is needed for recording; it's only required later for placing orders.
 
 ## Run

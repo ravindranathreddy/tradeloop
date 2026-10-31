@@ -182,6 +182,10 @@ def main():
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if cfg.get("alerts", {}).get("enabled"):
+        from tradeloop.alerts import install
+
+        install(cfg)
 
     problem = low_disk(cfg["db_path"], float(cfg.get("min_free_gb", 5)))
     if problem:
