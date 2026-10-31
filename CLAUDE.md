@@ -135,7 +135,15 @@ check, not the main evidence.
    adapter exists): `kill_switch.py` (data/KILL: halt, cancel, flatten), `watchdog.py` (stale
    data, max open loss, untagged position, heartbeat), `reconcile.py` (startup check, halts
    without flattening). Five ways of cutting the spread's big losses were tested and all
-   failed (research/LOG.md): the lever left is lot size. First strategy: put credit spread (passed its held-out test; memo
+   failed (research/LOG.md): the lever left is lot size.
+   Groww `Execution` adapter (mid-Nov plan): stages 1-3 done (`brokers/groww_orders.py`,
+   `brokers/groww_execution.py`, `groww_smoke.py`). Unarmed by default (`armed=False` refuses every
+   order); never place a real order without Ranga's explicit go-ahead. Verified read-only on Ranga's
+   account 31 Oct 2026: list keys are `positions` and `order_list`; the SDK ignores `page_size`
+   and needs `price` on every margin leg; Groww margins the NIFTY spread at ~Rs 60k (short put
+   alone ~Rs 125k). Still unchecked: how an open or carried-forward position is reported
+   (run `python -m tradeloop.groww_smoke` while a position exists), the expiry-day margin jump,
+   and the order/fill status sequences (needs a real order). First strategy: put credit spread (passed its held-out test; memo
    and drop rules in research/memos/put_credit_spread.md). First paper trade Mon 2 Nov
    2026. 30 trades / 4+ weeks, then Ranga's review before any real money.
 

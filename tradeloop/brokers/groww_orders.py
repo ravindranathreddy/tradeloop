@@ -256,16 +256,20 @@ class MarginAvailable:
     net_used: float
 
 
-def margin_request(orders: list[tuple[Order, Symbol]]) -> dict:
+def margin_request(orders: list[tuple[Order, Symbol]], prices: dict[InstrumentId, float] | None = None) -> dict:
     """Keyword arguments for GrowwAPI.get_order_margin_details: all legs of a spread in one
-    basket, so Groww can apply its hedge benefit."""
+    basket, so Groww can apply its hedge benefit.
+
+    The SDK reads order["price"] for every leg (its docs call it optional), so it is always sent:
+    the order's own price, else a reference price from `prices` (market orders have none, and the
+    premium of a bought option counts towards the margin), else 0."""
+    prices = prices or {}
     legs = []
     for o, s in orders:
-        leg = {"trading_symbol": s.trading_symbol, "quantity": o.qty, "exchange": s.exchange,
-               "product": _PRODUCT[o.product], "order_type": _TYPE[o.order_type], "transaction_type": o.side.value}
-        if o.order_type is OrderType.LIMIT:
-            leg["price"] = o.price
-        legs.append(leg)
+        price = o.price if o.order_type is OrderType.LIMIT else prices.get(o.instrument, 0.0)
+        legs.append({"trading_symbol": s.trading_symbol, "quantity": o.qty, "exchange": s.exchange,
+                     "product": _PRODUCT[o.product], "order_type": _TYPE[o.order_type],
+                     "transaction_type": o.side.value, "price": float(price or 0.0)})
     return {"segment": SEGMENT, "orders": legs}
 
 

@@ -169,9 +169,10 @@ def test_a_position_in_an_unknown_contract_is_untagged_not_skipped():
 
 def test_margin_basket_request_and_parsing():
     legs = [(order(inst=LONG, side=Side.BUY), SYMS[LONG]), (order(otype=OrderType.LIMIT, price=19.8), SYMS[SHORT])]
-    req = g.margin_request(legs)
+    req = g.margin_request(legs, prices={LONG: 5.2})
     assert req["segment"] == "FNO" and [x["transaction_type"] for x in req["orders"]] == ["BUY", "SELL"]
-    assert "price" not in req["orders"][0] and req["orders"][1]["price"] == 19.8
+    assert [x["price"] for x in req["orders"]] == [5.2, 19.8]               # reference price for the market leg, own price for the limit
+    assert g.margin_request(legs[:1])["orders"][0]["price"] == 0.0           # always present: the SDK indexes it
     m = g.parse_margin({"total_requirement": 61000.0, "span_required": 58000.0, "exposure_required": 2000.0,
                         "option_buy_premium": 340.0, "brokerage_and_charges": 45.0})
     a = g.parse_available({"clear_cash": 150000.0, "net_margin_used": 0.0,
