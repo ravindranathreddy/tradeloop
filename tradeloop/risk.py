@@ -2,6 +2,7 @@
 through here before reaching a broker.
 
 Checks, in order:
+  halted      kill switch active: every strategy order is rejected
   max lots    no single order larger than `max_lots`
   fresh data  no order without a fresh order book for the instrument (rule 11: no new
               entries on stale ticks); the strategy sees a rejection, never a silent drop
@@ -23,8 +24,10 @@ log = logging.getLogger("risk")
 
 class RiskGate:
     def __init__(self, inner: Execution, *, max_lots: int, lot_size: Callable[[InstrumentId], int],
-                 fresh: Callable[[InstrumentId], bool], clock_ms: Callable[[], int]):
+                 fresh: Callable[[InstrumentId], bool], clock_ms: Callable[[], int],
+                 halted: Callable[[], bool] = lambda: False):
         self.inner, self.max_lots, self.lot_size, self.fresh, self.clock = inner, max_lots, lot_size, fresh, clock_ms
+        self.halted = halted
         self._update_handlers: list[Callable[[OrderUpdate], None]] = []
         self.rejected: list[tuple[Order, str]] = []
         inner.on_order_update(lambda u: [h(u) for h in self._update_handlers])
@@ -40,6 +43,8 @@ class RiskGate:
         self.inner.place(order)
 
     def _check(self, order: Order) -> str | None:
+        if self.halted():
+            return "kill switch active"
         lots = order.qty // self.lot_size(order.instrument)
         if lots > self.max_lots:
             return f"{lots} lots exceeds the limit of {self.max_lots}"

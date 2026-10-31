@@ -32,6 +32,7 @@ from tradeloop.core.ids import InstrumentId
 from tradeloop.core.market_calendar import IST, default_calendar
 from tradeloop.core.types import Fill, Order, OrderUpdate, Position, Tick
 from tradeloop.engine import Engine, Quote
+from tradeloop.kill_switch import active as kill_active, flatten
 from tradeloop.lot_sizes import default_lot_sizes
 from tradeloop.paper_broker import PaperBroker
 from tradeloop.paper_store import PaperStore
@@ -79,7 +80,8 @@ class _Recorded:
 
 class PaperTrader:
     def __init__(self, cfg_path: Path, store: PaperStore, *, max_lots: int = 1,
-                 lot_size: Callable[[InstrumentId], int] | None = None, clock_ms: Callable[[], int] = _wall_ms):
+                 lot_size: Callable[[InstrumentId], int] | None = None, clock_ms: Callable[[], int] = _wall_ms,
+                 kill_file: Path | None = None):
         self.cfg = yaml.safe_load(Path(cfg_path).read_text())
         if len(self.cfg["underlyings"]) != 1:
             raise ValueError("paper trading runs one underlying per strategy config")
@@ -89,8 +91,11 @@ class PaperTrader:
         self.lot_size = lot_size or default_lot_sizes().lot_size
         self.broker = PaperBroker(self.lot_size, clock_ms=clock_ms)
         gate = RiskGate(self.broker, max_lots=max_lots, lot_size=self.lot_size, fresh=self.broker.fresh,
-                        clock_ms=clock_ms)
+                        clock_ms=clock_ms, halted=lambda: self.halted)
         self.gate = gate
+        self.kill_file, self.halted = kill_file, False
+        self._killed_ms: int | None = None         # the kill request already flattened
+        self._kill_check_ms = 0
         execution = _Recorded(gate, store, clock_ms)
         self.ledger = store.rebuild_ledger(self.strategy_id)
         self.engine = Engine(None, execution, self.ledger, strategy_id=self.strategy_id, config_version=self.version,
@@ -104,7 +109,23 @@ class PaperTrader:
         held = self.ledger.positions()
         log.info("%s (config %s): %d open positions from earlier days", self.strategy_id, self.version, len(held))
 
+    def _check_kill(self) -> None:
+        """At most once a second: halt on a kill request and flatten once per request. Orders go
+        straight to the paper broker, past the gate (which is now closed) and the strategy."""
+        now = self.clock()
+        if self.kill_file is None or now - self._kill_check_ms < 1000:
+            return
+        self._kill_check_ms = now
+        req = kill_active(self.kill_file)
+        self.halted = req is not None
+        if req and req["requested_ms"] != self._killed_ms:
+            self._killed_ms = req["requested_ms"]
+            log.warning("ALERT kill switch (%s): flattening %s", req["reason"], self.strategy_id)
+            flatten(_Recorded(self.broker, self.store, self.clock), self.ledger.positions(),
+                    strategy_id=self.strategy_id, config_version=self.version, request_ms=req["requested_ms"])
+
     def on_tick(self, tick: Tick) -> None:
+        self._check_kill()
         self.broker.on_tick(tick)
         iid = tick.instrument
         if iid == self.index and tick.ltp is not None:

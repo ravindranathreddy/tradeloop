@@ -162,7 +162,8 @@ def paper_traders(cfg: dict, rec: Recorder, md: MarketData) -> list:
     traders = []
     for path in cfg["paper"]:
         try:
-            t = PaperTrader(Path(path), store, max_lots=int(cfg.get("paper_max_lots", 1)), lot_size=lot_size)
+            t = PaperTrader(Path(path), store, max_lots=int(cfg.get("paper_max_lots", 1)), lot_size=lot_size,
+                           kill_file=Path(cfg.get("kill_file", "data/KILL")))
         except Exception:
             log.exception("Paper strategy %s not started", path)
             continue
