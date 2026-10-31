@@ -1,0 +1,123 @@
+# Scheduled events that can move the Indian index (used by research and, later, a trade filter).
+#
+# when:   in_session   announced while NSE is open (RBI ~10:00 IST, Budget 11:00, election counting
+#                      from the morning), so the reaction is that same day
+#         after_close  announced after the Indian close (FOMC decision is ~00:30 IST), so the
+#                      reaction is the next trading day
+# effect: optional; the first Indian session that reacts, when it isn't simply derived (the three
+#         Budgets presented on a weekend: NSE held a special session, our candles confirm it)
+# source: official  federalreserve.gov (FOMC 2021-26), rbi.org.in (2026 decisions, Dec 2026 scheduled)
+#         news      checked against news reports or Wikipedia
+#         recalled  written from memory, NOT checked: Ranga to verify before relying on it
+# Not included: US CPI/jobs data, state elections, exchange or SEBI circulars, unscheduled shocks.
+# Add the next year's RBI and FOMC dates when published.
+events:
+  - {date: 2020-01-29, kind: fomc, name: "FOMC decision", when: after_close, source: recalled}
+  - {date: 2020-02-01, kind: budget, name: "Union Budget 2020-21", when: in_session, source: news, effect: 2020-02-01}   # special session on a weekend (our candles confirm it traded)
+  - {date: 2020-02-06, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2020-03-03, kind: fomc, name: "FOMC decision", when: after_close, source: news}   # emergency 50bp cut
+  - {date: 2020-03-15, kind: fomc, name: "FOMC decision", when: after_close, source: news}   # emergency cut to zero, Sunday
+  - {date: 2020-03-27, kind: rbi, name: "RBI policy decision", when: in_session, source: news}   # unscheduled, advanced; announced 27 Mar
+  - {date: 2020-04-29, kind: fomc, name: "FOMC decision", when: after_close, source: recalled}
+  - {date: 2020-05-22, kind: rbi, name: "RBI policy decision", when: in_session, source: news}   # unscheduled, advanced from June
+  - {date: 2020-06-10, kind: fomc, name: "FOMC decision", when: after_close, source: recalled}
+  - {date: 2020-07-29, kind: fomc, name: "FOMC decision", when: after_close, source: recalled}
+  - {date: 2020-08-06, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2020-09-16, kind: fomc, name: "FOMC decision", when: after_close, source: recalled}
+  - {date: 2020-10-09, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2020-11-05, kind: fomc, name: "FOMC decision", when: after_close, source: recalled}
+  - {date: 2020-12-04, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2020-12-16, kind: fomc, name: "FOMC decision", when: after_close, source: recalled}
+  - {date: 2021-01-27, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2021-02-01, kind: budget, name: "Union Budget 2021-22", when: in_session, source: news}
+  - {date: 2021-02-05, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2021-03-17, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2021-04-07, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2021-04-28, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2021-06-04, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2021-06-16, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2021-07-28, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2021-08-06, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2021-09-22, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2021-10-08, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2021-11-03, kind: fomc, name: "FOMC decision", when: after_close, source: official, effect: 2021-11-08}   # 4 and 5 Nov were Diwali holidays
+  - {date: 2021-12-08, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2021-12-15, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2022-01-26, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2022-02-01, kind: budget, name: "Union Budget 2022-23", when: in_session, source: news}
+  - {date: 2022-02-10, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2022-03-16, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2022-04-08, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2022-05-04, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}   # off-cycle rate hike, announced in session
+  - {date: 2022-05-04, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2022-06-08, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2022-06-15, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2022-07-27, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2022-08-05, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2022-09-21, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2022-09-30, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2022-11-02, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2022-12-07, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2022-12-14, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2023-02-01, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2023-02-01, kind: budget, name: "Union Budget 2023-24", when: in_session, source: news}
+  - {date: 2023-02-08, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2023-03-22, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2023-04-06, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2023-05-03, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2023-06-08, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2023-06-14, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2023-07-26, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2023-08-10, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2023-09-20, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2023-10-06, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2023-11-01, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2023-12-08, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2023-12-13, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2024-01-31, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2024-02-01, kind: budget, name: "Interim Budget 2024-25", when: in_session, source: news}
+  - {date: 2024-02-08, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2024-03-20, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2024-04-05, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2024-05-01, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2024-06-04, kind: election, name: "General election results", when: in_session, source: recalled}   # NIFTY fell ~6% that day
+  - {date: 2024-06-07, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2024-06-12, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2024-07-23, kind: budget, name: "Union Budget 2024-25 (full)", when: in_session, source: news}
+  - {date: 2024-07-31, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2024-08-08, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2024-09-18, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2024-10-09, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2024-11-07, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2024-12-06, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2024-12-18, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2025-01-29, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2025-02-01, kind: budget, name: "Union Budget 2025-26", when: in_session, source: news, effect: 2025-02-01}   # special session on a weekend (our candles confirm it traded)
+  - {date: 2025-02-07, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2025-03-19, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2025-04-09, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2025-05-07, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2025-06-06, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2025-06-18, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2025-07-30, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2025-08-06, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2025-09-17, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2025-10-01, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2025-10-29, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2025-12-05, kind: rbi, name: "RBI policy decision", when: in_session, source: recalled}
+  - {date: 2025-12-10, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2026-01-28, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2026-02-01, kind: budget, name: "Union Budget 2026-27", when: in_session, source: news, effect: 2026-02-01}   # special session on a weekend (our candles confirm it traded)
+  - {date: 2026-02-06, kind: rbi, name: "RBI policy decision", when: in_session, source: news}
+  - {date: 2026-03-18, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2026-04-08, kind: rbi, name: "RBI policy decision", when: in_session, source: official}
+  - {date: 2026-04-29, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2026-06-05, kind: rbi, name: "RBI policy decision", when: in_session, source: official}
+  - {date: 2026-06-17, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2026-07-29, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2026-08-05, kind: rbi, name: "RBI policy decision", when: in_session, source: official}
+  - {date: 2026-09-16, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2026-10-07, kind: rbi, name: "RBI policy decision", when: in_session, source: official}
+  - {date: 2026-10-28, kind: fomc, name: "FOMC decision", when: after_close, source: official}
+  - {date: 2026-12-04, kind: rbi, name: "RBI policy decision", when: in_session, source: official}
+  - {date: 2026-12-09, kind: fomc, name: "FOMC decision", when: after_close, source: official}
