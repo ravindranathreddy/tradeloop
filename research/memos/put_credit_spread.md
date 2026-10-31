@@ -22,8 +22,12 @@ insurance (study 5: they paid back 0.50 of their price, 2020-2024).
   +2.4 to +4.8 points/trade, every year positive in every case.
 
 ## Money (1 lot, lot size 65)
-- Margin: Rs 59,803 (Groww's calculator, 27 Oct 2026). Keep ~Rs 1 lakh per lot.
-- Expected: ~Rs 218 per trade, ~Rs 11,000 a year (about 11% on Rs 1 lakh).
+- Margin: Rs 59,803 on entry day (Groww's calculator, 27 Oct 2026), but Rs 88,866 on
+  expiry day (measured 29 Oct 2026 on the SENSEX spread: SEBI's extra 2% exposure margin
+  on short options on their expiry day). Every trade holds into expiry day, so keep
+  ~Rs 1.2 lakh per lot. Live trading must check margin, including the expiry-day jump,
+  before each entry.
+- Expected: ~Rs 218 per trade, ~Rs 11,000 a year (about 9% on Rs 1.2 lakh, before tax).
 - Worst seen: -Rs 14,176 in a week; -Rs 19,531 peak to trough. Worst possible in one
   week: about -Rs 27,000 (the strike gap minus the credit).
 
@@ -46,3 +50,13 @@ held out 2025-2026: 90 trades, +23 points/trade, 94% wins, in the same calm peri
 Enters Tuesdays for Thursday expiries; first paper trade Tue 3 Nov 2026. Judged
 separately from NIFTY with the same review and drop rules; a good SENSEX paper result
 alone would not justify real money given the short history.
+
+## Paper-trading log
+
+- 28 Oct 2026, SENSEX (expiry 29 Oct): entered at 1 day to expiry (sold 71,100 PE at
+  20.00, bought 69,600 PE at 3.65) because paper trading started on Wednesday and the
+  rule entered on the first day it saw. Not the tested rule (Tuesday entry). Fixed the
+  same day: enter only on the first trading day of the window, skip the week otherwise.
+  This trade is excluded from the strategy's evaluation; it still settles normally.
+  Re-running 2025-2026 with the fix: NIFTY unchanged; SENSEX one week fewer (14 Jan
+  2026, holiday-shifted, data missing its proper entry day), Rs 41,315 instead of 41,490.

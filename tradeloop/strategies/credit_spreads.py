@@ -16,7 +16,8 @@ nothing is sold; if the sale doesn't fill, the protection is sold back. Never a 
 short option.
 
 Config keys: lots, entry_time ("HH:MM"), enter_within_days (enter on the first trading
-day with 1..N calendar days to expiry; e.g. 2 means Monday for a Tuesday expiry),
+day with 1..N calendar days to expiry, and only that day; e.g. 2 means Monday for a
+Tuesday expiry, Tuesday for a Thursday one),
 short_otm_pct, long_otm_pct (distance from the index at entry, in %), and for
 `credit_spread` option_type (PE or CE).
 """
@@ -59,11 +60,21 @@ class CreditSpread:
     def on_minute(self, ctx) -> None:
         if self.state == "waiting":
             if 0 < ctx.days_to_expiry <= self.within and ctx.time >= self.entry:
+                if self._missed_first_day(ctx):
+                    self.state = "done"
+                    return
                 self._enter(ctx)
         elif self.state == "buying_long":
             self._after_long(ctx)
         elif self.state == "selling_short":
             self._after_short(ctx)
+
+    def _missed_first_day(self, ctx) -> bool:
+        """Enter only on the first trading day inside the window, as the backtest does. A
+        process that wasn't running that day (e.g. started on Wednesday for a Thursday
+        expiry) would otherwise enter later, with less time left: a setup that tested badly."""
+        prev = ctx.previous_trading_day()
+        return prev is not None and 0 < (ctx.expiry - prev).days <= self.within
 
     def _working(self, ctx) -> bool:
         return any(o.instrument in (self.long, self.short) for o in ctx.working_orders())

@@ -19,7 +19,7 @@ from typing import Protocol
 
 from tradeloop.core.ids import InstrumentId, Kind
 from tradeloop.core.interfaces import Execution
-from tradeloop.core.market_calendar import IST
+from tradeloop.core.market_calendar import IST, UnknownYear, default_calendar
 from tradeloop.core.types import Fill, Order, OrderType, Product, Side
 from tradeloop.ledger import Ledger
 
@@ -64,6 +64,13 @@ class Context:
     def days_to_expiry(self) -> int:
         """Calendar days: 0 on expiry day."""
         return (self.expiry - self.today).days
+
+    def previous_trading_day(self) -> date | None:
+        """From the market calendar; None for years it doesn't cover (pre-2026 backtests)."""
+        try:
+            return default_calendar().previous_trading_day(self.today)
+        except UnknownYear:
+            return None
 
     def positions(self) -> dict[InstrumentId, int]:
         """Signed quantities from confirmed fills."""

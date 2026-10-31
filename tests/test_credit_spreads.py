@@ -92,3 +92,31 @@ def test_call_side_mirrors_the_put_side():
 def test_iron_condor_only_one_side_can_lose(close, expected):
     rows, fills = run(close, cfg={**CFG, "strategy": "iron_condor"})
     assert len(fills) == 4 and sum(r["gross"] for r in rows) == expected
+
+
+class _Ctx:
+    """Just enough context for the entry-day check."""
+    def __init__(self, today, expiry, prev):
+        self.today, self.expiry, self._prev = today, expiry, prev
+        self.days_to_expiry = (expiry - today).days
+        self.time = time(9, 20)
+        self.orders = []
+
+    def previous_trading_day(self):
+        return self._prev
+
+    def options(self, kind):
+        return {}
+
+
+def test_enters_only_on_the_first_day_of_the_window():
+    from tradeloop.strategies.credit_spreads import CreditSpread
+    thu = date(2026, 10, 29)
+    # started on Wednesday for a Thursday expiry: Tuesday was the first day in the window
+    late = CreditSpread(CFG)
+    late.on_minute(_Ctx(date(2026, 10, 28), thu, prev=date(2026, 10, 27)))
+    assert late.state == "done" and late.long is None
+    # on Tuesday itself (previous day Monday, 3 days out) it goes ahead
+    on_time = CreditSpread(CFG)
+    on_time.on_minute(_Ctx(date(2026, 10, 27), thu, prev=date(2026, 10, 26)))
+    assert on_time.state == "done" and on_time.day == date(2026, 10, 27)   # entered (no quotes, so no order)
