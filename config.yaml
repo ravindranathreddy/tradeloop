@@ -27,7 +27,7 @@ paper_max_lots: 1
 # Watchdog (tradeloop/watchdog.py): trips the kill switch on hard rules.
 watchdog:
   stale_seconds: 120        # no tick this long, with positions open
-  max_open_loss: 20000      # rupees per strategy on open positions; one lot's worst case is Rs 14-27k
+  max_open_loss: 20000      # rupees per strategy on open positions; one NIFTY lot (65) caps at about Rs 29k at index 22,900 (width = 2% of the index, so about Rs 1,300 more per 1,000 index points)
   heartbeat_file: data/heartbeat
 
 # Phone alerts (tradeloop/alerts.py): every "ALERT" log line goes to Telegram, with Gmail as the
