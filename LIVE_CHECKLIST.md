@@ -9,6 +9,27 @@ What is already tested offline (fake Groww API, 10 live scenario drills): see th
 
 Status: `open` = not yet seen, `checked` = observed (add date and what happened).
 
+## Still to build before arming (code)
+
+Agreed 31 Oct 2026. Everything else in the live path is built and drilled (see CLAUDE.md).
+
+1. **Pre-flight check** (`python -m tradeloop.live_check`): one go / no-go answer. Groww login and instrument
+   list; positions, orders and margin readable; no kill file; no untagged order or position; a test alert
+   delivered; what `live.enabled` / `live.armed` say. Read-only.
+2. **Canary order tool**: place one limit order far from the market so it cannot fill, then cancel it. Closes the
+   cheap checklist items on the real order path (accepted order types, status sequence, duplicate reference,
+   rate limits, cancel flow). It sends a real order: needs Ranga's explicit go-ahead and an armed run.
+3. **Cumulative live loss limit** (a few lines once Ranga gives the number; see "Decisions pending" in
+   CLAUDE.md). Optional alongside it: a live-only `max_open_loss`, or one set as a percent of the spread's cap.
+4. **Live settlement automation**: `paper settle --live` is manual today and its cron line in crontab.txt is
+   commented out. Enable it with arming.
+5. **Deployment to the Mumbai VM (static IP)**: `caffeinate` in the crontab is macOS-only, so the VM needs its own
+   start-up. Also an outside "still alive" signal: everything runs on one machine, and if it is off no cron job
+   runs, so nobody is alerted. A daily OK message or a ping from a second place would cover it.
+
+Optional: a daily summary md file; SENSEX in the live path (BSE rows, lot size 20/25 and freeze quantity have not
+been exercised there, so start live on NIFTY only).
+
 ## Orders
 
 - **Market orders on options** (open). We don't know whether Groww accepts plain MARKET orders on

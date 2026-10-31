@@ -178,6 +178,8 @@ check, not the main evidence.
 - **Lot size for the first live trades:** 1 lot (`live.max_lots: 1`) unless he says otherwise. The Rs 100k margin
   cap also blocks a second lot.
 - Archive long-term home, the 26 unverified event dates, and when to arm live (see LIVE_CHECKLIST.md).
+- The code still to build before arming (pre-flight check, canary order tool, loss limit, live settle cron, VM
+  deployment) is listed in LIVE_CHECKLIST.md under "Still to build before arming".
 
 ## Research method (how rules are found)
 
