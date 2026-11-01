@@ -40,7 +40,7 @@ Status: testing / ready (data in hand) / needs data / parked.
 | 7 | Event filter: skip selling before RBI policy, budget, election results, US Fed | Removes known tail days; tests whether events cause the losses | overlay | needs event calendar |
 | 8 | Event IV crush: sell spreads right after the event | IV drops once uncertainty resolves | capped | needs event calendar |
 | 9 | Expiry-day afternoon spreads (enter 13:00-14:00) | Decay is fastest late on expiry day; less time for big moves | capped, small | ready |
-| 10 | NIFTY vs SENSEX: sell the richer one (different expiry days) | Same market, prices can differ | capped | ready (SENSEX from Aug 2023) |
+| 10 | NIFTY vs SENSEX: sell the richer one (different expiry days) | Same market, prices can differ | capped | ready (SENSEX from Aug 2023). Only NIFTY and SENSEX still have weekly expiries (checked 1 Nov 2026); BANKNIFTY, FINNIFTY, MIDCPNIFTY, NIFTYNXT50, BANKEX are monthly only |
 | 11 | Calendar spread: sell this week, buy next week | Near-week decays faster; the long leg is tail protection | capped-ish, vega risk | needs next-week contracts |
 | 12 | Calendar ratio strangle (published NIFTY bot) | Theta harvest with next-week tail protection | complex | needs next-week contracts |
 | 13 | Debit spreads in a trend (e.g. above the 20-day average) | Momentum; cheaper than buying options | capped, ~35-45% win | parked: prediction, low prior after study 3 |

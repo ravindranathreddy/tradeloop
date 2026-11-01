@@ -352,3 +352,98 @@ depends on them now. Calendar kept for later research (events.yaml, core/events.
 Pattern across all five tests (vol filters x2, expected-move strike, early exit, events): every
 way of avoiding the big losses costs more premium than it saves, because the spread's income
 is largely a payment for bearing exactly those risks. The remaining lever is size, not rules.
+
+## Expiry calendar check (1 Nov 2026, Groww instrument list)
+
+Which index options still have weekly expiries (nearest dates listed):
+- Weekly: NIFTY (NSE; lot 65) and SENSEX (BSE; Thursdays, 5/12/19/26 Nov; lot 25).
+- Monthly only: BANKNIFTY, FINNIFTY, MIDCPNIFTY, NIFTYNXT50 (NSE, last-of-month, next 23 Nov then 29 Dec) and BANKEX (BSE, next 26 Nov).
+So SENSEX stays a second weekly product (the earlier note that it had gone monthly was wrong);
+the other indices give about 12 entries a year, too few for a 30-trade paper test within
+months and for any study. They are out of scope for the credit-spread family. Rows listed
+are the contracts Groww has open now, not a guarantee of future expiry rules.
+
+## Pre-registration: skew-weighted condor (1 Nov 2026, before running)
+
+Idea: the put spread earns the far-put overpricing (study 5: payout ratio 0.50 for 2-3% puts
+1-2 days out). Calls 2-3% out also pay out less than their price (0.73, range 0.54..0.93).
+Adding a call spread should collect that too; the call side is the weaker effect, so sold
+farther out than the put. Only one side can lose in a week, so the worst loss stays near
+the put spread's.
+
+Structure: base put spread unchanged (sell 2.5% below, buy 4.5% below) plus a call spread
+(sell k% above, buy 2.0% further above), same 09:20 entry, 2 days before, hold to expiry.
+Development: NIFTY 2020-2024, the same 260 weeks as backtest 1. Variants tried: 2
+(k = 3.0, 3.5). The 2.5/2.5 condor (+191 per trade) was already run in backtest 1 and counts
+against the total.
+
+PASS needs, for the better of the two k, declared as one number before looking:
+  (a) average Rs per lot after charges and slippage >= the put spread's +170;
+  (b) the call spread adds a positive average on its own (condor minus put spread > 0);
+  (c) worst trade no worse than -17,000 per lot;
+  (d) positive in at least 4 of 5 years.
+Held-out 2025-26 only if all four pass: average >= half the put spread's held-out figure
+in points, 80% wins. Honest expectation: (b) is a coin flip. Backtest 1's call spreads were
+marginal (+22 to +45), and a 2020-24 bull market flatters puts, not calls.
+
+## Pre-registration: expiry-day afternoon put spread (1 Nov 2026, before running)
+
+Idea: decay is fastest on expiry afternoon and there is little time left for a big move.
+Study 5 warns the premium is tiny (far options Rs 1-2) and costs eat it, so this tests
+whether a closer strike changes that.
+
+Structure: put credit spread entered at 13:30 on the expiry day, sell k% below the 13:30
+price, buy 1.5% further below, hold to the official close. Development: NIFTY 2020-2024,
+one trade per expiry. Variants tried: 3 (k = 0.75, 1.0, 1.5).
+
+PASS needs for the best k (named before looking: 1.0):
+  (a) average >= +100 Rs per lot after charges and slippage (about one trade's costs);
+  (b) bootstrap 95% range lower bound above 0;
+  (c) worst trade no worse than -20,000 per lot;
+  (d) positive in at least 4 of 5 years.
+Held-out only if all pass. Honest expectation: fail on (a) or (b). Closer strikes pay more
+but lose more often, and expiry-day gamma means one move wipes many wins. Tested because
+it needs no new data and the answer is useful either way.
+
+Order of work: skew condor first (reuses the weekly run_week machinery), then afternoon
+spread (needs a 13:30 entry in the config, which the engine already supports for
+entry 10:00 / 11:00). Results go below, with the verdict, before any held-out run.
+
+## Result: skew-weighted condor, development 2020-2024 (1 Nov 2026)
+
+`research/skew_condor_study.py`, NIFTY, 260 weeks (base reproduces: put spread Rs 44,217, +170 per
+week). Call spread = sold k% above, bought 2% further, same 09:20 entry. Rs per lot after charges
+and slippage. The condor is the put spread plus the call spread (separate legs, so they add).
+
+| call short | call side alone | condor avg (95% range) | worst | wins | years + | verdict |
+|---|---|---|---|---|---|---|
+| 3.0% above | -60 (53% wins) | +110 (-165..+357) | -13,278 | 80% | 5/5 | FAIL (a, b) |
+| 3.5% above | -98 (40% wins) | +72 (-198..+313) | -13,387 | 78% | 4/5 | FAIL (a, b, d) |
+
+Reading: the call side loses money on its own in both variants, and the farther out it sits the
+worse it does (more of its credit is eaten by costs). Adding it lowers the average from +170 to
++110 or +72 and the range now includes 0. The worst trade does not get worse, as predicted, but
+there is nothing earned for that. As the pre-registration warned, calls were only marginal in
+backtest 1 and 2020-24 was a bull market. Conclusion: no call side; the put spread stays as it is.
+Held-out period not opened. Variants tried: 2 (plus the 2.5/2.5 condor in backtest 1).
+
+## Result: expiry-day afternoon put spread, development 2020-2024 (1 Nov 2026)
+
+`research/afternoon_spread_study.py` (own strategy subclass: the live one never enters on expiry day).
+NIFTY, 260 expiries, entry 13:30 on expiry day, sold k% below, bought 1.5% further, held to the close.
+Rs per lot after charges and slippage.
+
+| sold | traded | avg per expiry (95% range) | worst | wins | years + | verdict |
+|---|---|---|---|---|---|---|
+| 0.75% | 258 | +41 (-57..+127) | -6,320 | 66% | 3/5 | FAIL (a, b, d) |
+| 1.0% (named main) | 255 | +4 (-84..+75) | -6,320 | 49% | 2/5 | FAIL (a, b, d) |
+| 1.5% | 255 | -9 (-45..+25) | -3,289 | 21% | 2/5 | FAIL (a, b, d) |
+
+Reading: as expected, nothing here. Closer strikes earn a little more but never reach the +100
+line, and every range includes zero. Farther strikes collect so little that costs consume it
+(wins 21%). The loss is small and capped (worst -6.3k), so this is not dangerous, just empty:
+the expiry afternoon is already priced efficiently after costs. Conclusion: no. Held-out
+period not opened. Variants tried: 3.
+Both ready-data ideas from the backlog (#3 skew condor, #9 afternoon spreads) are now closed;
+the remaining new-strategy options need new data (next-week contracts for calendar spreads,
+or the paper recorder's own history).
